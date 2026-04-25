@@ -127,9 +127,7 @@ export async function startTurn(roomCode, playerId, roomState) {
     updates[`players.${playerId}.immune`] = false;
   }
 
-  if (reshuffled) {
-    updates[`players.${playerId}.frienemiesBonus`] = 0;
-  }
+  updates[`players.${playerId}.frienemiesBonus`] = 0;
 
   await updateRoom(roomCode, updates);
 }
@@ -336,7 +334,6 @@ function applySymbols(symbols, context, players, decks, discardPiles) {
         decks[playerId]        = deck;
         discardPiles[playerId] = discard;
         players[playerId].hand = [...(players[playerId].hand || []), ...drawn];
-        if (reshuffled) players[playerId].frienemiesBonus = 0;
         break;
       }
 
@@ -374,7 +371,6 @@ export function resolveSymbols(symbols, context, roomState) {
       decks[playerId]        = deck;
       discardPiles[playerId] = nd;
       players[playerId].hand = [...(players[playerId].hand || []), ...drawn];
-      if (reshuffled) players[playerId].frienemiesBonus = 0;
     } else {
       pendingReclaim = true;
     }
@@ -390,7 +386,6 @@ export function resolveSymbols(symbols, context, roomState) {
         decks[pid]        = deck;
         discardPiles[pid] = nd;
         players[pid].hand = drawn;
-        if (reshuffled) players[pid].frienemiesBonus = 0;
       }
     }
   }
@@ -502,7 +497,6 @@ function resolveMighty(sym, context, players, decks, discardPiles) {
         if (tDiscard.length === 0) break;
         tDeck = shuffle(tDiscard);
         discardPiles[targetId] = [];
-        players[targetId].frienemiesBonus = 0;
       }
       const stolenId = tDeck[0];
       decks[targetId] = tDeck.slice(1);
@@ -560,7 +554,6 @@ function resolveMighty(sym, context, players, decks, discardPiles) {
           decks[pid] = deck;
           discardPiles[pid] = nd;
           players[pid].hand = drawn;
-          if (reshuffled) players[pid].frienemiesBonus = 0;
         }
       }
       extraPlays++;
@@ -614,7 +607,6 @@ function resolveMighty(sym, context, players, decks, discardPiles) {
           if (oDiscard.length === 0) continue;
           oDeck = shuffle(oDiscard);
           discardPiles[oid] = [];
-          players[oid].frienemiesBonus = 0;
         }
         const stolenId = oDeck[0];
         decks[oid] = oDeck.slice(1);
@@ -636,7 +628,6 @@ function resolveMighty(sym, context, players, decks, discardPiles) {
       decks[playerId]        = deck;
       discardPiles[playerId] = nd;
       players[playerId].hand = [...(players[playerId].hand || []), ...drawn];
-      if (reshuffled) players[playerId].frienemiesBonus = 0;
       const formSet = new Set(['jaheira_wolf_form', 'jaheira_bear_form']);
       if ((players[playerId].hand || []).some(cid => formSet.has(cid))) extraPlays++;
       break;
