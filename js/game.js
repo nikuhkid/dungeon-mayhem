@@ -389,11 +389,13 @@ function resolveMighty(sym, context, players, decks, discardPiles) {
 export function applyDamage(player, amount) {
   let shields = player.shields || 0;
   let hp      = player.hp;
-  if (amount >= shields) {
-    hp     -= (amount - shields);
-    shields = 0;
-  }
-  // damage < shields: shield absorbs it, persists intact (all-or-nothing per hit)
+
+  const danageToShields = Math.min(shields, amount);
+  shields -= damageToShields;
+  
+  const remainingDamage = amount - damageToShields;
+  hp -= remainingDamage;
+  
   return { newHp: Math.max(0, hp), newShields: shields };
 }
 
