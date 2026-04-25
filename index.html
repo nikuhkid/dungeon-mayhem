@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dungeon Mayhem</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+
+  <!-- HOME SCREEN -->
+  <div id="screen-home" class="screen">
+    <h1>Dungeon Mayhem</h1>
+    <div id="home-actions">
+      <input type="text" id="player-name-input" placeholder="Your name" maxlength="20" />
+      <button id="btn-create-room">Create Room</button>
+      <div id="join-row">
+        <input type="text" id="room-code-input" placeholder="XXXX" maxlength="4" />
+        <button id="btn-join-room">Join Room</button>
+      </div>
+    </div>
+    <div id="home-error" class="error-msg"></div>
+  </div>
+
+  <!-- LOBBY SCREEN -->
+  <div id="screen-lobby" class="screen hidden">
+    <h2>Lobby — <span id="lobby-code"></span></h2>
+    <div id="lobby-players"></div>
+    <div id="hero-select">
+      <h3>Choose your hero</h3>
+      <div id="hero-list"></div>
+    </div>
+    <button id="btn-ready" disabled>Lock In</button>
+    <button id="btn-start-game" class="hidden">Start Game</button>
+    <div id="lobby-status"></div>
+  </div>
+
+  <!-- GAME SCREEN -->
+  <div id="screen-game" class="screen hidden">
+    <div id="turn-indicator"></div>
+    <div id="target-prompt" class="hidden">
+      <span>🎯 Select a target — click an opponent</span>
+      <button id="btn-cancel-target" class="secondary">Cancel</button>
+    </div>
+    <div id="game-main">
+      <div id="opponents-area"></div>
+      <div id="action-log"><h4>Action Log</h4><div id="log-entries"></div></div>
+    </div>
+    <div id="self-panel">
+      <div id="self-info"></div>
+      <div id="hand-area"></div>
+      <div id="hand-actions">
+        <button id="btn-end-turn" disabled>End Turn</button>
+        <span id="turn-hint"></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- WIN SCREEN -->
+  <div id="screen-win" class="screen hidden">
+    <div id="win-crown">🏆</div>
+    <h1>Victory!</h1>
+    <div id="win-hero"></div>
+    <div id="win-player"></div>
+    <div id="final-standings"></div>
+    <button id="btn-play-again">Back to Home</button>
+  </div>
+
+  <script type="module" src="js/ui.js"></script>
+</body>
+</html>
