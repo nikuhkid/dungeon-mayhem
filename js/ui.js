@@ -1,7 +1,7 @@
 import { getOrCreatePlayerId, handleCreateRoom, handleJoinRoom, selectHero, setReady, startGameIfReady, isHost } from './room.js';
 import { subscribeToRoom } from './firebase.js';
 import { HEROES, CARDS, SYM, symbolsToIcons, cardNeedsTarget } from './cards.js';
-import { startGame, startTurn, endTurn, playCard, reclaimCard } from './game.js';
+import { startGame, startTurn, endTurn, playCard, reclaimCard, resolveShieldPick } from './game.js';
 
 // --- Module state ---
 let playerId       = getOrCreatePlayerId();
@@ -217,7 +217,7 @@ function initGame() {
     if (selectingTarget || playingCard) return;
     if (!roomState || roomState.currentTurn !== playerId) return;
     if (roomState.turnPhase !== 'playing') return;
-    if (roomState.pendingReclaim) return;
+    if (roomState.pendingReclaim || roomState.pendingShieldPick) return;
 
     const played = roomState.cardsPlayedThisTurn || 0;
     const extra  = roomState.extraPlaysThisTurn  || 0;
@@ -251,6 +251,20 @@ function initGame() {
     }
   });
 
+  // Shield pick modal: pick which shield card to steal/destroy
+  document.getElementById('shield-pick-cards').addEventListener('click', async (e) => {
+    if (playingCard) return;
+    const cardEl = e.target.closest('.shield-pick-card');
+    if (!cardEl) return;
+    const shieldInstanceId = cardEl.dataset.sid;
+    playingCard = true;
+    try {
+      await resolveShieldPick(roomCode, roomState, playerId, shieldInstanceId);
+    } finally {
+      playingCard = false;
+    }
+  });
+
   // Reclaim modal: pick a card from discard
   document.getElementById('reclaim-cards').addEventListener('click', async (e) => {
     if (playingCard) return;
@@ -271,12 +285,20 @@ function renderGame(state) {
     showScreen('screen-game');
   }
 
-  // Reclaim modal takes priority — show picker and halt normal render updates
+  // Reclaim modal
   if (state.pendingReclaim === playerId) {
     showReclaimModal(state.discardPiles[playerId] || []);
     return;
   }
   hideReclaimModal();
+
+  // Shield pick modal
+  if (state.pendingShieldPick?.pickerId === playerId) {
+    const pick = state.pendingShieldPick;
+    showShieldPickModal(state.players[pick.targetId]?.shieldCards || [], pick.effect);
+    return;
+  }
+  hideShieldPickModal();
 
   // Reset target selection when turn changes away from us
   if (state.currentTurn !== lastTurnPlayer) {
@@ -325,6 +347,34 @@ function showReclaimModal(discardPile) {
 
 function hideReclaimModal() {
   document.getElementById('reclaim-modal').classList.add('hidden');
+}
+
+// --- Shield pick modal ---
+
+function showShieldPickModal(shieldCards, effect) {
+  const modal   = document.getElementById('shield-pick-modal');
+  const title   = document.getElementById('shield-pick-title');
+  const cardsEl = document.getElementById('shield-pick-cards');
+
+  title.textContent = effect === 'steal_shield'
+    ? '🛡️ Choose a shield card to steal'
+    : '💥 Choose a shield card to destroy';
+
+  cardsEl.innerHTML = shieldCards.length === 0
+    ? '<p class="muted-msg">No shield cards in play</p>'
+    : shieldCards.map(sc => {
+        const card = CARDS[sc.cardId];
+        return `<div class="shield-pick-card" data-sid="${sc.id}">
+          <div class="card-name">${card?.name ?? sc.cardId}</div>
+          <div class="shield-remaining">🛡️ ${sc.remaining} remaining</div>
+        </div>`;
+      }).join('');
+
+  modal.classList.remove('hidden');
+}
+
+function hideShieldPickModal() {
+  document.getElementById('shield-pick-modal').classList.add('hidden');
 }
 
 // --- Game render helpers ---
@@ -377,7 +427,7 @@ function renderOpponents(state) {
       <div class="hp-bar-wrap"><div class="hp-bar-fill" style="width:${hpPct}%"></div></div>
       <div class="opp-stats">
         <span class="stat-hp">❤️ ${p.hp}/10</span>
-        ${p.shields > 0 ? `<span class="stat-shield">🛡️ ${p.shields}</span>` : ''}
+        ${(p.shieldCards || []).map(sc => `<span class="stat-shield shield-card-badge" title="${CARDS[sc.cardId]?.name ?? sc.cardId}">🛡️${sc.remaining}</span>`).join('')}
         ${p.eliminated ? '<span class="elim-badge">Eliminated</span>' : ''}
       </div>
       <div class="opp-card-count">🃏 ${(p.hand || []).length} card${(p.hand || []).length !== 1 ? 's' : ''}</div>
@@ -410,7 +460,7 @@ function renderSelf(state) {
     <div class="hp-bar-wrap large"><div class="hp-bar-fill" style="width:${hpPct}%"></div></div>
     <div class="self-stats">
       <span class="stat-hp">❤️ ${me.hp} / 10</span>
-      ${me.shields > 0 ? `<span class="stat-shield">🛡️ ${me.shields}</span>` : ''}
+      ${(me.shieldCards || []).map(sc => `<span class="stat-shield shield-card-badge" title="${CARDS[sc.cardId]?.name ?? sc.cardId}">🛡️${sc.remaining}</span>`).join('')}
     </div>`;
 }
 
@@ -447,7 +497,7 @@ function renderHand(state) {
   const isMyTurn = state.currentTurn === playerId && state.turnPhase === 'playing';
   const played   = state.cardsPlayedThisTurn || 0;
   const extra    = state.extraPlaysThisTurn  || 0;
-  const canPlay  = isMyTurn && !selectingTarget && !state.pendingReclaim && (played === 0 || played <= extra);
+  const canPlay  = isMyTurn && !selectingTarget && !state.pendingReclaim && !state.pendingShieldPick && (played === 0 || played <= extra);
 
   document.getElementById('hand-area').innerHTML = (me.hand || []).map(cid => {
     const card      = CARDS[cid];
@@ -485,7 +535,7 @@ function updateGameButtons(state) {
   const isMyTurn = state.currentTurn === playerId && state.turnPhase === 'playing' && !me?.eliminated;
   const played   = state.cardsPlayedThisTurn || 0;
   const extra    = state.extraPlaysThisTurn  || 0;
-  const canEnd   = isMyTurn && played >= 1 && played > extra && !state.pendingReclaim;
+  const canEnd   = isMyTurn && played >= 1 && played > extra && !state.pendingReclaim && !state.pendingShieldPick;
 
   document.getElementById('btn-end-turn').disabled = !canEnd;
 
@@ -537,7 +587,7 @@ function renderWin(state) {
       <span class="standing-hero-name">${h?.name ?? ''}</span>
       <div class="hp-bar-wrap"><div class="hp-bar-fill" style="width:${hpBar}%"></div></div>
       <span class="stat-hp">❤️ ${p.hp}/10</span>
-      ${p.shields > 0 ? `<span class="stat-shield">🛡️ ${p.shields}</span>` : ''}
+      ${(p.shieldCards || []).map(sc => `<span class="stat-shield shield-card-badge" title="${CARDS[sc.cardId]?.name ?? sc.cardId}">🛡️${sc.remaining}</span>`).join('')}
     </div>`;
   }).join('');
 }
