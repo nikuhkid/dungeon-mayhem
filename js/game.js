@@ -35,8 +35,11 @@ function arraysEqual(a, b) {
 function getAttackTargets(targetType, playerId, players) {
   switch (targetType) {
     case 'all_opponents':
-      return Object.keys(players).filter(pid => pid !== playerId && !players[pid].eliminated);
+      return Object.keys(players).filter(
+        pid => pid !== playerId && !players[pid].eliminated && !players[pid].immune
+      );
     case 'all':
+      // AoE — hits everyone including self, bypasses immune
       return Object.keys(players).filter(pid => !players[pid].eliminated);
     default:
       return [];
@@ -57,6 +60,7 @@ export async function startGame(roomCode, roomState) {
     winner: null,
     cardsPlayedThisTurn: 0,
     extraPlaysThisTurn: 0,
+    pendingReclaim: null,
   };
 
   const decks = {};
@@ -71,6 +75,7 @@ export async function startGame(roomCode, roomState) {
     updates[`players.${pid}.eliminated`] = false;
     updates[`players.${pid}.shields`]    = 0;
     updates[`players.${pid}.hp`]         = 10;
+    updates[`players.${pid}.immune`]     = false;
   }
 
   updates.decks = decks;
@@ -94,37 +99,32 @@ export async function startTurn(roomCode, playerId, roomState) {
   const entry = logEntry(`${roomState.players[playerId].name}'s turn`, { playerId });
   const actionLog = pushLog(roomState.actionLog, entry);
 
-  await updateRoom(roomCode, {
+  const updates = {
     [`decks.${playerId}`]:           deck,
     [`discardPiles.${playerId}`]:    discard,
     [`players.${playerId}.hand`]:    newHand,
     turnPhase:            'playing',
     cardsPlayedThisTurn:  0,
     extraPlaysThisTurn:   0,
+    pendingReclaim:       null,
     lastAction:           entry,
     actionLog,
-  });
+  };
+
+  // Clear immune at start of this player's turn
+  if (roomState.players[playerId]?.immune) {
+    updates[`players.${playerId}.immune`] = false;
+  }
+
+  await updateRoom(roomCode, updates);
 }
 
 export async function endTurn(roomCode, roomState, playerId) {
   const updates = {
     cardsPlayedThisTurn: 0,
     extraPlaysThisTurn:  0,
+    pendingReclaim:      null,
   };
-
-  let deck    = [...(roomState.decks[playerId] || [])];
-  let discard = [...(roomState.discardPiles[playerId] || [])];
-  let hand    = [...(roomState.players[playerId].hand || [])];
-
-  if (hand.length === 0) {
-    const result = drawCards(deck, discard, 2);
-    deck    = result.deck;
-    discard = result.discard;
-    hand    = result.drawn;
-    updates[`players.${playerId}.hand`] = hand;
-    updates[`decks.${playerId}`]        = deck;
-    updates[`discardPiles.${playerId}`] = discard;
-  }
 
   const nextId = getNextTurn(roomState.turnOrder, playerId, roomState.players);
   const entry  = logEntry(`${roomState.players[playerId].name} ended their turn`, { playerId });
@@ -172,7 +172,7 @@ export async function playCard(roomCode, roomState, playerId, cardId, targetId =
     cardsPlayedThisTurn: (roomState.cardsPlayedThisTurn || 0) + 1,
   };
 
-  // Phase 6: form gate — wrong-form Jaheira mighty cards fizzle (discard with no effect)
+  // Form gate — wrong-form cards fizzle (discard with no effect)
   if (card?.requiresForm) {
     const currentForm = roomState.players[playerId].jaheiraForm ?? 'none';
     if (currentForm !== card.requiresForm) {
@@ -191,14 +191,36 @@ export async function playCard(roomCode, roomState, playerId, cardId, targetId =
     }
   }
 
+  // Form-dependent card (Gift of Silvanus) — select symbols by current form
+  let symbolsToResolve = card?.symbols;
+  if (card?.formDependent) {
+    const form = roomState.players[playerId].jaheiraForm ?? 'none';
+    if (form === 'bear')      symbolsToResolve = card.bearSymbols;
+    else if (form === 'wolf') symbolsToResolve = card.wolfSymbols;
+    else {
+      const fizzleEntry = logEntry(
+        `${player.name} played ${card.name} — no form active, fizzled!`,
+        { playerId, cardId }
+      );
+      await updateRoom(roomCode, {
+        [`players.${playerId}.hand`]: hand,
+        [`discardPiles.${playerId}`]: discard,
+        lastAction:          fizzleEntry,
+        actionLog:           pushLog(roomState.actionLog, fizzleEntry),
+        cardsPlayedThisTurn: (roomState.cardsPlayedThisTurn || 0) + 1,
+      });
+      return;
+    }
+  }
+
   // Resolve symbols against state with card already removed from hand/discard
-  if (card?.symbols) {
+  if (symbolsToResolve?.length) {
     const stateForEffect = {
       ...roomState,
       players:      { ...roomState.players,      [playerId]: { ...player, hand } },
       discardPiles: { ...roomState.discardPiles, [playerId]: discard },
     };
-    const effectUpdates = resolveSymbols(card.symbols, { playerId, targetId }, stateForEffect);
+    const effectUpdates = resolveSymbols(symbolsToResolve, { playerId, targetId }, stateForEffect);
     Object.assign(updates, effectUpdates);
   }
 
@@ -214,7 +236,6 @@ export async function playCard(roomCode, roomState, playerId, cardId, targetId =
   }
   const winner = checkWinCondition(finalPlayers);
   if (winner) {
-    // 'draw' means all players dead simultaneously (e.g. mutual Fireball) → last to act wins
     updates.winner = winner === 'draw' ? playerId : winner;
     updates.status = 'finished';
   }
@@ -222,17 +243,37 @@ export async function playCard(roomCode, roomState, playerId, cardId, targetId =
   await updateRoom(roomCode, updates);
 }
 
+// --- Reclaim (Divine Inspiration) ---
+
+export async function reclaimCard(roomCode, roomState, playerId, cardId) {
+  const discard = [...(roomState.discardPiles[playerId] || [])];
+  const idx = discard.indexOf(cardId);
+  if (idx === -1) return;
+  discard.splice(idx, 1);
+  const hand = [...(roomState.players[playerId].hand || []), cardId];
+
+  const entry = logEntry(
+    `${roomState.players[playerId].name} reclaimed ${CARDS[cardId]?.name ?? cardId} from discard`,
+    { playerId, cardId }
+  );
+
+  await updateRoom(roomCode, {
+    [`players.${playerId}.hand`]: hand,
+    [`discardPiles.${playerId}`]: discard,
+    pendingReclaim: null,
+    lastAction:     entry,
+    actionLog:      pushLog(roomState.actionLog, entry),
+  });
+}
+
 // --- Symbol resolution ---
 
-export function resolveSymbols(symbols, context, roomState) {
+// Applies symbol effects directly to mutable clones of players/decks/discardPiles.
+// Returns extraPlays count. Does NOT handle RECLAIM (handled in resolveSymbols).
+function applySymbols(symbols, context, players, decks, discardPiles) {
   const { playerId, targetId } = context;
-
-  const players      = structuredClone(roomState.players);
-  const decks        = structuredClone(roomState.decks || {});
-  const discardPiles = structuredClone(roomState.discardPiles || {});
   let extraPlays = 0;
 
-  // Non-mighty first, mighty last
   const ordered = [
     ...symbols.filter(s => s.type !== SYM.MIGHTY),
     ...symbols.filter(s => s.type === SYM.MIGHTY),
@@ -244,7 +285,7 @@ export function resolveSymbols(symbols, context, roomState) {
       case SYM.ATTACK: {
         let targets;
         if (sym.target === 'opponent') {
-          targets = targetId && players[targetId] && !players[targetId].eliminated
+          targets = targetId && players[targetId] && !players[targetId].eliminated && !players[targetId].immune
             ? [targetId] : [];
         } else {
           targets = getAttackTargets(sym.target, playerId, players);
@@ -286,18 +327,63 @@ export function resolveSymbols(symbols, context, roomState) {
     }
   }
 
+  return extraPlays;
+}
+
+export function resolveSymbols(symbols, context, roomState) {
+  const { playerId } = context;
+
+  const players      = structuredClone(roomState.players);
+  const decks        = structuredClone(roomState.decks || {});
+  const discardPiles = structuredClone(roomState.discardPiles || {});
+
+  // Separate RECLAIM from other symbols
+  const reclaimSyms = symbols.filter(s => s.type === SYM.RECLAIM);
+  const otherSyms   = symbols.filter(s => s.type !== SYM.RECLAIM);
+
+  let extraPlays   = applySymbols(otherSyms, context, players, decks, discardPiles);
+  let pendingReclaim = false;
+
+  // Handle RECLAIM (Divine Inspiration)
+  for (const _sym of reclaimSyms) {
+    const disc = discardPiles[playerId] || [];
+    if (disc.length === 0) {
+      // Empty discard → draw 1 from deck instead
+      const { deck, discard: newDiscard, drawn } = drawCards(decks[playerId] || [], [], 1);
+      decks[playerId]        = deck;
+      discardPiles[playerId] = newDiscard;
+      players[playerId].hand = [...(players[playerId].hand || []), ...drawn];
+    } else {
+      pendingReclaim = true;
+    }
+  }
+
+  // Mid-turn refill: any player with 0 cards draws 2 immediately
+  if (!pendingReclaim) {
+    for (const pid of Object.keys(players)) {
+      if (!players[pid].eliminated && (players[pid].hand || []).length === 0) {
+        const { deck, discard: newDiscard, drawn } = drawCards(
+          decks[pid] || [], discardPiles[pid] || [], 2
+        );
+        decks[pid]        = deck;
+        discardPiles[pid] = newDiscard;
+        players[pid].hand = drawn;
+      }
+    }
+  }
+
   // Diff against original state → only emit changed fields
   const updates = {};
 
   for (const pid of Object.keys(roomState.players)) {
     const orig = roomState.players[pid];
     const curr = players[pid];
-    if (curr.hp !== orig.hp)                               updates[`players.${pid}.hp`]         = curr.hp;
-    if (curr.shields !== orig.shields)                     updates[`players.${pid}.shields`]    = curr.shields;
-    if (curr.eliminated !== orig.eliminated)               updates[`players.${pid}.eliminated`] = curr.eliminated;
-    if ((curr.jaheiraForm ?? null) !== (orig.jaheiraForm ?? null))
-                                                           updates[`players.${pid}.jaheiraForm`] = curr.jaheiraForm;
-    if (!arraysEqual(curr.hand, orig.hand))                updates[`players.${pid}.hand`]       = curr.hand;
+    if (curr.hp !== orig.hp)                                             updates[`players.${pid}.hp`]         = curr.hp;
+    if (curr.shields !== orig.shields)                                   updates[`players.${pid}.shields`]    = curr.shields;
+    if (curr.eliminated !== orig.eliminated)                             updates[`players.${pid}.eliminated`] = curr.eliminated;
+    if ((curr.jaheiraForm ?? null) !== (orig.jaheiraForm ?? null))       updates[`players.${pid}.jaheiraForm`] = curr.jaheiraForm;
+    if ((curr.immune ?? false) !== (orig.immune ?? false))               updates[`players.${pid}.immune`]     = curr.immune;
+    if (!arraysEqual(curr.hand, orig.hand))                              updates[`players.${pid}.hand`]       = curr.hand;
   }
 
   for (const pid of Object.keys(decks)) {
@@ -311,6 +397,8 @@ export function resolveSymbols(symbols, context, roomState) {
 
   if (extraPlays > 0)
     updates.extraPlaysThisTurn = (roomState.extraPlaysThisTurn || 0) + extraPlays;
+  if (pendingReclaim)
+    updates.pendingReclaim = playerId;
 
   return updates;
 }
@@ -321,8 +409,18 @@ function resolveMighty(sym, context, players, decks, discardPiles) {
 
   switch (sym.effect) {
 
+    case 'mighty_strike': {
+      // Targeted heavy attack
+      if (!targetId || !players[targetId] || players[targetId].eliminated || players[targetId].immune) break;
+      const { newHp, newShields } = applyDamage(players[targetId], sym.value);
+      players[targetId].hp      = newHp;
+      players[targetId].shields = newShields;
+      if (newHp <= 0) players[targetId].eliminated = true;
+      break;
+    }
+
     case 'swap_hp': {
-      if (!targetId || !players[targetId] || players[targetId].eliminated) break;
+      if (!targetId || !players[targetId] || players[targetId].eliminated || players[targetId].immune) break;
       const myHp    = players[playerId].hp;
       const theirHp = players[targetId].hp;
       players[playerId].hp  = theirHp;
@@ -333,7 +431,7 @@ function resolveMighty(sym, context, players, decks, discardPiles) {
     }
 
     case 'steal_shield': {
-      if (!targetId || !players[targetId]) break;
+      if (!targetId || !players[targetId] || players[targetId].immune) break;
       const stolen = players[targetId].shields || 0;
       if (stolen > 0) {
         players[playerId].shields  = (players[playerId].shields || 0) + stolen;
@@ -344,7 +442,7 @@ function resolveMighty(sym, context, players, decks, discardPiles) {
 
     case 'steal_and_play': {
       // Steal random card from opponent's hand, add to mine + grant extra play
-      if (!targetId || !players[targetId]) break;
+      if (!targetId || !players[targetId] || players[targetId].immune) break;
       const targetHand = players[targetId].hand || [];
       if (targetHand.length === 0) break;
       const i = Math.floor(Math.random() * targetHand.length);
@@ -356,8 +454,8 @@ function resolveMighty(sym, context, players, decks, discardPiles) {
     }
 
     case 'steal_card': {
-      // Minsc: steal random card from target into hand (no bonus play)
-      if (!targetId || !players[targetId]) break;
+      // Steal random card from target's hand into mine (no bonus play)
+      if (!targetId || !players[targetId] || players[targetId].immune) break;
       const targetHand = players[targetId].hand || [];
       if (targetHand.length === 0) break;
       const i = Math.floor(Math.random() * targetHand.length);
@@ -367,14 +465,47 @@ function resolveMighty(sym, context, players, decks, discardPiles) {
       break;
     }
 
+    case 'pickpocket': {
+      // Steal top card of opponent's deck, resolve its effects, return to their discard
+      if (!targetId || !players[targetId] || players[targetId].eliminated || players[targetId].immune) break;
+      let targetDeck = decks[targetId] || [];
+      if (targetDeck.length === 0) {
+        // Reshuffle their discard if deck is empty
+        const targetDiscard = discardPiles[targetId] || [];
+        if (targetDiscard.length === 0) break;
+        targetDeck = shuffle(targetDiscard);
+        discardPiles[targetId] = [];
+      }
+      const stolenCardId = targetDeck[0];
+      decks[targetId] = targetDeck.slice(1);
+
+      const stolenCard = CARDS[stolenCardId];
+      if (stolenCard?.symbols) {
+        // Resolve non-mighty effects of stolen card as playerId
+        const nonMighty = stolenCard.symbols.filter(
+          s => s.type !== SYM.MIGHTY && s.type !== SYM.RECLAIM
+        );
+        applySymbols(nonMighty, context, players, decks, discardPiles);
+      }
+
+      // Return stolen card to original owner's discard
+      discardPiles[targetId] = [...(discardPiles[targetId] || []), stolenCardId];
+      break;
+    }
+
     case 'set_form': {
       players[playerId].jaheiraForm = sym.value;
       break;
     }
 
+    case 'set_immune': {
+      players[playerId].immune = true;
+      break;
+    }
+
     case 'destroy_shields': {
       const targets = sym.target === 'all_opponents'
-        ? Object.keys(players).filter(pid => pid !== playerId && !players[pid].eliminated)
+        ? Object.keys(players).filter(pid => pid !== playerId && !players[pid].eliminated && !players[pid].immune)
         : Object.keys(players).filter(pid => !players[pid].eliminated);
       for (const tid of targets) players[tid].shields = 0;
       break;
@@ -389,13 +520,9 @@ function resolveMighty(sym, context, players, decks, discardPiles) {
 export function applyDamage(player, amount) {
   let shields = player.shields || 0;
   let hp      = player.hp;
-
-  const damageToShields = Math.min(shields, amount);
-  shields -= damageToShields;
-  
-  const remainingDamage = amount - damageToShields;
-  hp -= remainingDamage;
-  
+  const absorbed = Math.min(amount, shields);
+  shields -= absorbed;
+  hp      -= (amount - absorbed);
   return { newHp: Math.max(0, hp), newShields: shields };
 }
 
@@ -409,15 +536,11 @@ export function getJaheiraForm(player) {
   return player.jaheiraForm || 'none';
 }
 
-export async function switchJaheiraForm(roomCode, playerId, form) {
-  // Handled via set_form effect in resolveSymbols (Phase 6 for gating)
-}
-
 // --- Win condition ---
 
 export function checkWinCondition(players) {
   const alive = Object.entries(players).filter(([, p]) => !p.eliminated);
-  if (alive.length === 0) return 'draw';   // all dead simultaneously — caller resolves
+  if (alive.length === 0) return 'draw';
   if (alive.length === 1) return alive[0][0];
   return null;
 }

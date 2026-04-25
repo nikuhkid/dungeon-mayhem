@@ -1,7 +1,7 @@
 import { getOrCreatePlayerId, handleCreateRoom, handleJoinRoom, selectHero, setReady, startGameIfReady, isHost } from './room.js';
 import { subscribeToRoom } from './firebase.js';
-import { HEROES, CARDS, symbolsToIcons, cardNeedsTarget } from './cards.js';
-import { startGame, startTurn, endTurn, playCard } from './game.js';
+import { HEROES, CARDS, SYM, symbolsToIcons, cardNeedsTarget } from './cards.js';
+import { startGame, startTurn, endTurn, playCard, reclaimCard } from './game.js';
 
 // --- Module state ---
 let playerId       = getOrCreatePlayerId();
@@ -11,7 +11,7 @@ let roomState      = null;
 // Game-screen local state
 let lastTurnPlayer    = null;
 let drawingInProgress = false;
-let playingCard       = false;   // guard against double-submit during Firestore write
+let playingCard       = false;
 let pendingCard       = null;
 let selectingTarget   = false;
 let currentScreen     = null;
@@ -65,7 +65,7 @@ function initHome() {
 
   document.getElementById('btn-play-again').addEventListener('click', () => {
     sessionStorage.removeItem('roomCode');
-    roomCode = null;
+    roomCode  = null;
     roomState = null;
     showScreen('screen-home');
   });
@@ -196,15 +196,17 @@ function initGame() {
     if (!selectingTarget || playingCard) return;
     const panel = e.target.closest('.opponent-panel');
     if (!panel) return;
-    const targetId = panel.dataset.pid;
-    if (!targetId || roomState?.players[targetId]?.eliminated) return;
+    const tid = panel.dataset.pid;
+    if (!tid) return;
+    const target = roomState?.players[tid];
+    if (!target || target.eliminated || target.immune) return;
 
-    const cid   = pendingCard;
+    const cid       = pendingCard;
     pendingCard     = null;
     selectingTarget = false;
     playingCard     = true;
     try {
-      await playCard(roomCode, roomState, playerId, cid, targetId);
+      await playCard(roomCode, roomState, playerId, cid, tid);
     } finally {
       playingCard = false;
     }
@@ -215,17 +217,29 @@ function initGame() {
     if (selectingTarget || playingCard) return;
     if (!roomState || roomState.currentTurn !== playerId) return;
     if (roomState.turnPhase !== 'playing') return;
+    if (roomState.pendingReclaim) return;
 
     const played = roomState.cardsPlayedThisTurn || 0;
     const extra  = roomState.extraPlaysThisTurn  || 0;
-    if (played > 0 && played > extra) return; // no plays remaining
+    if (played > 0 && played > extra) return;
 
     const cardEl = e.target.closest('.hand-card');
     if (!cardEl) return;
     const cid  = cardEl.dataset.cid;
     const card = CARDS[cid];
+    const me   = roomState.players[playerId];
 
-    if (cardNeedsTarget(card)) {
+    // Determine if this card needs a target (accounting for form-dependent cards)
+    let needsTarget = cardNeedsTarget(card);
+    if (card?.formDependent) {
+      const form = me?.jaheiraForm ?? 'none';
+      const activeSyms = form === 'bear' ? card.bearSymbols
+                       : form === 'wolf' ? card.wolfSymbols
+                       : [];
+      needsTarget = (activeSyms || []).some(s => s.target === 'opponent');
+    }
+
+    if (needsTarget) {
       pendingCard     = cid;
       selectingTarget = true;
       renderGame(roomState);
@@ -238,12 +252,33 @@ function initGame() {
       }
     }
   });
+
+  // Reclaim modal: pick a card from discard
+  document.getElementById('reclaim-cards').addEventListener('click', async (e) => {
+    if (playingCard) return;
+    const cardEl = e.target.closest('.reclaim-card');
+    if (!cardEl) return;
+    const cid = cardEl.dataset.cid;
+    playingCard = true;
+    try {
+      await reclaimCard(roomCode, roomState, playerId, cid);
+    } finally {
+      playingCard = false;
+    }
+  });
 }
 
 function renderGame(state) {
   if (document.getElementById('screen-game').classList.contains('hidden')) {
     showScreen('screen-game');
   }
+
+  // Reclaim modal takes priority — show picker and halt normal render updates
+  if (state.pendingReclaim === playerId) {
+    showReclaimModal(state.discardPiles[playerId] || []);
+    return;
+  }
+  hideReclaimModal();
 
   // Reset target selection when turn changes away from us
   if (state.currentTurn !== lastTurnPlayer) {
@@ -270,6 +305,31 @@ function renderGame(state) {
   renderActionLog(state);
   updateGameButtons(state);
 }
+
+// --- Reclaim modal ---
+
+function showReclaimModal(discardPile) {
+  const modal   = document.getElementById('reclaim-modal');
+  const cardsEl = document.getElementById('reclaim-cards');
+
+  cardsEl.innerHTML = discardPile.length === 0
+    ? '<p class="muted-msg">Discard pile is empty</p>'
+    : discardPile.map(cid => {
+        const card = CARDS[cid];
+        return `<div class="reclaim-card" data-cid="${cid}">
+          <div class="card-name">${card?.name ?? cid}</div>
+          <div class="card-symbols">${symbolsToIcons(card?.symbols || [])}</div>
+        </div>`;
+      }).join('');
+
+  modal.classList.remove('hidden');
+}
+
+function hideReclaimModal() {
+  document.getElementById('reclaim-modal').classList.add('hidden');
+}
+
+// --- Game render helpers ---
 
 function renderTurnIndicator(state) {
   const el = document.getElementById('turn-indicator');
@@ -299,17 +359,23 @@ function formBadge(player) {
   return `<span class="form-badge ${cls}">${label}</span>`;
 }
 
+function immuneBadge(player) {
+  return player.immune ? '<span class="immune-badge">🥷 Hidden</span>' : '';
+}
+
 function renderOpponents(state) {
   const opponents = Object.entries(state.players).filter(([pid]) => pid !== playerId);
 
   document.getElementById('opponents-area').innerHTML = opponents.map(([pid, p]) => {
     const hero      = p.heroId ? HEROES[p.heroId] : null;
     const hpPct     = Math.max(0, Math.min(100, (p.hp / 10) * 100));
-    const selClass  = selectingTarget && !p.eliminated ? ' selectable' : '';
+    // Immune players can't be targeted
+    const isTargetable = selectingTarget && !p.eliminated && !p.immune;
+    const selClass  = isTargetable ? ' selectable' : '';
     const elimClass = p.eliminated ? ' eliminated' : '';
 
     return `<div class="opponent-panel${selClass}${elimClass}" data-pid="${pid}">
-      <div class="opp-hero-name">${hero?.emoji ?? '?'} ${escHtml(p.name)} ${formBadge(p)}</div>
+      <div class="opp-hero-name">${hero?.emoji ?? '?'} ${escHtml(p.name)} ${formBadge(p)} ${immuneBadge(p)}</div>
       <div class="hp-bar-wrap"><div class="hp-bar-fill" style="width:${hpPct}%"></div></div>
       <div class="opp-stats">
         <span class="stat-hp">❤️ ${p.hp}/10</span>
@@ -317,13 +383,13 @@ function renderOpponents(state) {
         ${p.eliminated ? '<span class="elim-badge">Eliminated</span>' : ''}
       </div>
       <div class="opp-card-count">🃏 ${(p.hand || []).length} card${(p.hand || []).length !== 1 ? 's' : ''}</div>
-      ${selectingTarget && !p.eliminated ? '<div class="target-hint">Click to target</div>' : ''}
+      ${isTargetable ? '<div class="target-hint">Click to target</div>' : ''}
     </div>`;
   }).join('');
 }
 
 function renderSelf(state) {
-  const me   = state.players[playerId];
+  const me = state.players[playerId];
   if (!me) return;
 
   if (me.eliminated) {
@@ -341,6 +407,7 @@ function renderSelf(state) {
       ${hero?.emoji ?? '?'} ${escHtml(me.name)}
       <span class="hero-class-label">${hero?.class ?? ''}</span>
       ${formBadge(me)}
+      ${immuneBadge(me)}
     </div>
     <div class="hp-bar-wrap large"><div class="hp-bar-fill" style="width:${hpPct}%"></div></div>
     <div class="self-stats">
@@ -350,8 +417,30 @@ function renderSelf(state) {
 }
 
 function isFormBlocked(card, me) {
-  if (!card?.requiresForm) return false;
-  return (me.jaheiraForm ?? 'none') !== card.requiresForm;
+  if (card?.requiresForm)  return (me.jaheiraForm ?? 'none') !== card.requiresForm;
+  if (card?.formDependent) return (me.jaheiraForm ?? 'none') === 'none';
+  return false;
+}
+
+function cardIcons(card, me) {
+  if (card?.formDependent) {
+    const form = me?.jaheiraForm ?? 'none';
+    const syms = form === 'bear' ? card.bearSymbols
+               : form === 'wolf' ? card.wolfSymbols
+               : [];
+    return syms.length ? symbolsToIcons(syms) : '✨';
+  }
+  return symbolsToIcons(card?.symbols);
+}
+
+function cardDesc(card, me) {
+  if (card?.formDependent) {
+    const form = me?.jaheiraForm ?? 'none';
+    if (form === 'bear') return 'Bear Form: gain 3 shields + heal 2';
+    if (form === 'wolf') return 'Wolf Form: deal 2 to all opponents';
+    return 'Requires bear or wolf form to activate';
+  }
+  return card?.description ?? '';
 }
 
 function renderHand(state) {
@@ -361,7 +450,7 @@ function renderHand(state) {
   const isMyTurn = state.currentTurn === playerId && state.turnPhase === 'playing';
   const played   = state.cardsPlayedThisTurn || 0;
   const extra    = state.extraPlaysThisTurn  || 0;
-  const canPlay  = isMyTurn && !selectingTarget && (played === 0 || played <= extra);
+  const canPlay  = isMyTurn && !selectingTarget && !state.pendingReclaim && (played === 0 || played <= extra);
 
   document.getElementById('hand-area').innerHTML = (me.hand || []).map(cid => {
     const card      = CARDS[cid];
@@ -372,13 +461,20 @@ function renderHand(state) {
       isPending           ? 'pending'  : '',
       blocked             ? 'form-locked' : '',
     ].filter(Boolean).join(' ');
-    const formLabel = blocked
-      ? `<div class="form-lock-label">${card.requiresForm === 'bear' ? '🐻' : '🐺'} ${card.requiresForm} form only</div>`
-      : '';
+
+    let formLabel = '';
+    if (blocked) {
+      if (card?.requiresForm) {
+        formLabel = `<div class="form-lock-label">${card.requiresForm === 'bear' ? '🐻' : '🐺'} ${card.requiresForm} form only</div>`;
+      } else if (card?.formDependent) {
+        formLabel = '<div class="form-lock-label">🐻/🐺 requires a form</div>';
+      }
+    }
+
     return `<div class="hand-card${classes ? ' ' + classes : ''}" data-cid="${cid}">
       <div class="card-name">${card?.name ?? cid}</div>
-      <div class="card-symbols">${card ? symbolsToIcons(card.symbols) : ''}</div>
-      <div class="card-desc">${card?.description ?? ''}</div>
+      <div class="card-symbols">${cardIcons(card, me)}</div>
+      <div class="card-desc">${cardDesc(card, me)}</div>
       ${formLabel}
     </div>`;
   }).join('') || '<div class="empty-hand">No cards in hand</div>';
@@ -396,7 +492,7 @@ function updateGameButtons(state) {
   const isMyTurn = state.currentTurn === playerId && state.turnPhase === 'playing' && !me?.eliminated;
   const played   = state.cardsPlayedThisTurn || 0;
   const extra    = state.extraPlaysThisTurn  || 0;
-  const canEnd   = isMyTurn && played >= 1 && played > extra;
+  const canEnd   = isMyTurn && played >= 1 && played > extra && !state.pendingReclaim;
 
   document.getElementById('btn-end-turn').disabled = !canEnd;
 
@@ -405,6 +501,8 @@ function updateGameButtons(state) {
     hint.textContent = '';
   } else if (!isMyTurn) {
     hint.textContent = '';
+  } else if (state.pendingReclaim === playerId) {
+    hint.textContent = '📜 Choose a card to reclaim from your discard';
   } else if (played === 0) {
     hint.textContent = 'Play a card to end your turn';
   } else if (played <= extra) {
@@ -429,7 +527,6 @@ function renderWin(state) {
   document.getElementById('win-player').textContent =
     winner ? `${escHtml(winner.name)} wins!` : '';
 
-  // Final standings sorted: winner first, then by HP descending
   const playerEntries = Object.entries(state.players).sort(([aId, a], [bId, b]) => {
     if (aId === state.winner) return -1;
     if (bId === state.winner) return 1;

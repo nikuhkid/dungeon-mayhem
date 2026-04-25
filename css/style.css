@@ -597,3 +597,88 @@ button.secondary {
   padding: 0.75rem 2rem;
   font-size: 1rem;
 }
+
+/* --- immune badge --- */
+.immune-badge {
+  display: inline-block;
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 0.15em 0.5em;
+  border-radius: 4px;
+  background: #1a2a3a;
+  color: #5bc4f0;
+  border: 1px solid #2a4a6a;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  vertical-align: middle;
+}
+
+/* --- reclaim modal --- */
+#reclaim-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#reclaim-modal.hidden { display: none !important; }
+
+#reclaim-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.75);
+}
+
+#reclaim-content {
+  position: relative;
+  z-index: 1;
+  background: var(--surface);
+  border: 1px solid var(--gold);
+  border-radius: var(--border-radius);
+  padding: 1.5rem;
+  max-width: 600px;
+  width: 90%;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+#reclaim-content h3 {
+  color: var(--gold);
+  margin-bottom: 1rem;
+  text-align: center;
+}
+
+#reclaim-cards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  justify-content: center;
+}
+
+.reclaim-card {
+  background: var(--card-bg);
+  border: 2px solid var(--gold);
+  border-radius: var(--border-radius);
+  padding: 0.75rem 1rem;
+  cursor: pointer;
+  min-width: 110px;
+  text-align: center;
+  transition: transform 0.1s, border-color 0.15s;
+}
+
+.reclaim-card:hover {
+  transform: translateY(-3px);
+  border-color: #fff;
+}
+
+.reclaim-card .card-name {
+  font-size: 0.8rem;
+  font-weight: 600;
+  margin-bottom: 0.35rem;
+}
+
+.reclaim-card .card-symbols {
+  font-size: 0.9rem;
+}
