@@ -15,6 +15,8 @@ let playingCard       = false;
 let pendingCard       = null;
 let selectingTarget   = false;
 let currentScreen     = null;
+let endTurnTimer      = null;
+let endTurnTick       = 0;
 
 // --- Screen routing ---
 
@@ -176,15 +178,6 @@ function renderLobby(state) {
 // --- Game screen ---
 
 function initGame() {
-  document.getElementById('btn-end-turn').addEventListener('click', async () => {
-    if (!roomState || roomState.currentTurn !== playerId) return;
-    const played = roomState.cardsPlayedThisTurn || 0;
-    const extra  = roomState.extraPlaysThisTurn  || 0;
-    if (played < 1 || played <= extra) return;
-    document.getElementById('btn-end-turn').disabled = true;
-    await endTurn(roomCode, roomState, playerId);
-  });
-
   document.getElementById('btn-cancel-target').addEventListener('click', () => {
     pendingCard     = null;
     selectingTarget = false;
@@ -199,7 +192,9 @@ function initGame() {
     const tid = panel.dataset.pid;
     if (!tid) return;
     const target = roomState?.players[tid];
-    if (!target || target.eliminated || target.immune) return;
+    if (!target || target.eliminated) return;
+    const aliveCount = Object.values(roomState.players).filter(p => !p.eliminated).length;
+    if (target.immune && aliveCount > 2) return;
 
     const cid       = pendingCard;
     pendingCard     = null;
@@ -412,13 +407,14 @@ function immuneBadge(player) {
 }
 
 function renderOpponents(state) {
-  const opponents = Object.entries(state.players).filter(([pid]) => pid !== playerId);
+  const opponents  = Object.entries(state.players).filter(([pid]) => pid !== playerId);
+  const aliveCount = Object.values(state.players).filter(p => !p.eliminated).length;
 
   document.getElementById('opponents-area').innerHTML = opponents.map(([pid, p]) => {
     const hero      = p.heroId ? HEROES[p.heroId] : null;
     const hpPct     = Math.max(0, Math.min(100, (p.hp / 10) * 100));
-    // Immune players can't be targeted
-    const isTargetable = selectingTarget && !p.eliminated && !p.immune;
+    // Immune players can be targeted in 2-player (effects still fizzle)
+    const isTargetable = selectingTarget && !p.eliminated && (!p.immune || aliveCount <= 2);
     const selClass  = isTargetable ? ' selectable' : '';
     const elimClass = p.eliminated ? ' eliminated' : '';
 
@@ -537,15 +533,40 @@ function updateGameButtons(state) {
   const extra    = state.extraPlaysThisTurn  || 0;
   const canEnd   = isMyTurn && played >= 1 && played > extra && !state.pendingReclaim && !state.pendingShieldPick;
 
-  document.getElementById('btn-end-turn').disabled = !canEnd;
+  const countdownEl = document.getElementById('end-turn-countdown');
+
+  if (canEnd && !endTurnTimer) {
+    endTurnTick = 3;
+    countdownEl.textContent = `Ending turn in ${endTurnTick}s`;
+    countdownEl.classList.remove('hidden');
+    const tick = () => {
+      endTurnTick--;
+      if (endTurnTick <= 0) {
+        endTurnTimer = null;
+        countdownEl.classList.add('hidden');
+        if (roomState?.status === 'playing' && roomState?.currentTurn === playerId) {
+          endTurn(roomCode, roomState, playerId);
+        }
+      } else {
+        countdownEl.textContent = `Ending turn in ${endTurnTick}s`;
+        endTurnTimer = setTimeout(tick, 1000);
+      }
+    };
+    endTurnTimer = setTimeout(tick, 1000);
+  } else if (!canEnd && endTurnTimer) {
+    clearTimeout(endTurnTimer);
+    endTurnTimer = null;
+    endTurnTick  = 0;
+    countdownEl.classList.add('hidden');
+  }
 
   const hint = document.getElementById('turn-hint');
-  if (me?.eliminated) {
-    hint.textContent = '';
-  } else if (!isMyTurn) {
+  if (me?.eliminated || !isMyTurn) {
     hint.textContent = '';
   } else if (state.pendingReclaim === playerId) {
-    hint.textContent = '📜 Choose a card to reclaim from your discard';
+    hint.textContent = '📜 Choose a card to reclaim';
+  } else if (state.pendingShieldPick?.pickerId === playerId) {
+    hint.textContent = '🛡️ Choose a shield card';
   } else if (played === 0) {
     hint.textContent = 'Play a card to end your turn';
   } else if (played <= extra) {
