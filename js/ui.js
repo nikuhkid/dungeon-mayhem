@@ -229,14 +229,12 @@ function initGame() {
     const card = CARDS[cid];
     const me   = roomState.players[playerId];
 
-    // Determine if this card needs a target (accounting for form-dependent cards)
+    // Determine if this card needs a target (base symbols + active formBonus)
     let needsTarget = cardNeedsTarget(card);
-    if (card?.formDependent) {
+    if (!needsTarget && card?.formBonus) {
       const form = me?.jaheiraForm ?? 'none';
-      const activeSyms = form === 'bear' ? card.bearSymbols
-                       : form === 'wolf' ? card.wolfSymbols
-                       : [];
-      needsTarget = (activeSyms || []).some(s => s.target === 'opponent');
+      const bonus = card.formBonus[form];
+      if (bonus?.some(s => s.target === 'opponent')) needsTarget = true;
     }
 
     if (needsTarget) {
@@ -417,28 +415,27 @@ function renderSelf(state) {
 }
 
 function isFormBlocked(card, me) {
-  if (card?.requiresForm)  return (me.jaheiraForm ?? 'none') !== card.requiresForm;
-  if (card?.formDependent) return (me.jaheiraForm ?? 'none') === 'none';
+  if (card?.requiresForm) return (me.jaheiraForm ?? 'none') !== card.requiresForm;
   return false;
 }
 
 function cardIcons(card, me) {
-  if (card?.formDependent) {
+  if (card?.formBonus) {
     const form = me?.jaheiraForm ?? 'none';
-    const syms = form === 'bear' ? card.bearSymbols
-               : form === 'wolf' ? card.wolfSymbols
-               : [];
-    return syms.length ? symbolsToIcons(syms) : '✨';
+    const bonus = card.formBonus[form];
+    const allSyms = bonus?.length ? [...(card.symbols || []), ...bonus] : (card.symbols || []);
+    return symbolsToIcons(allSyms);
   }
   return symbolsToIcons(card?.symbols);
 }
 
 function cardDesc(card, me) {
-  if (card?.formDependent) {
+  if (card?.formBonus) {
     const form = me?.jaheiraForm ?? 'none';
-    if (form === 'bear') return 'Bear Form: gain 3 shields + heal 2';
-    if (form === 'wolf') return 'Wolf Form: deal 2 to all opponents';
-    return 'Requires bear or wolf form to activate';
+    if (form !== 'none') {
+      const tag = form === 'bear' ? '🐻 Bear bonus' : '🐺 Wolf bonus';
+      return `${card.description ?? ''} (${tag} active)`;
+    }
   }
   return card?.description ?? '';
 }
@@ -463,12 +460,8 @@ function renderHand(state) {
     ].filter(Boolean).join(' ');
 
     let formLabel = '';
-    if (blocked) {
-      if (card?.requiresForm) {
-        formLabel = `<div class="form-lock-label">${card.requiresForm === 'bear' ? '🐻' : '🐺'} ${card.requiresForm} form only</div>`;
-      } else if (card?.formDependent) {
-        formLabel = '<div class="form-lock-label">🐻/🐺 requires a form</div>';
-      }
+    if (blocked && card?.requiresForm) {
+      formLabel = `<div class="form-lock-label">${card.requiresForm === 'bear' ? '🐻' : '🐺'} ${card.requiresForm} form only</div>`;
     }
 
     return `<div class="hand-card${classes ? ' ' + classes : ''}" data-cid="${cid}">

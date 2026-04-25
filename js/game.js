@@ -39,8 +39,8 @@ function getAttackTargets(targetType, playerId, players) {
         pid => pid !== playerId && !players[pid].eliminated && !players[pid].immune
       );
     case 'all':
-      // AoE — hits everyone including self, bypasses immune
-      return Object.keys(players).filter(pid => !players[pid].eliminated);
+      // Hits everyone including caster, but immune still blocks HP/shield effects
+      return Object.keys(players).filter(pid => !players[pid].eliminated && !players[pid].immune);
     default:
       return [];
   }
@@ -61,6 +61,7 @@ export async function startGame(roomCode, roomState) {
     cardsPlayedThisTurn: 0,
     extraPlaysThisTurn: 0,
     pendingReclaim: null,
+    turnBonusDamage: 0,
   };
 
   const decks = {};
@@ -107,6 +108,7 @@ export async function startTurn(roomCode, playerId, roomState) {
     cardsPlayedThisTurn:  0,
     extraPlaysThisTurn:   0,
     pendingReclaim:       null,
+    turnBonusDamage:      0,
     lastAction:           entry,
     actionLog,
   };
@@ -124,6 +126,7 @@ export async function endTurn(roomCode, roomState, playerId) {
     cardsPlayedThisTurn: 0,
     extraPlaysThisTurn:  0,
     pendingReclaim:      null,
+    turnBonusDamage:     0,
   };
 
   const nextId = getNextTurn(roomState.turnOrder, playerId, roomState.players);
@@ -172,45 +175,12 @@ export async function playCard(roomCode, roomState, playerId, cardId, targetId =
     cardsPlayedThisTurn: (roomState.cardsPlayedThisTurn || 0) + 1,
   };
 
-  // Form gate — wrong-form cards fizzle (discard with no effect)
-  if (card?.requiresForm) {
-    const currentForm = roomState.players[playerId].jaheiraForm ?? 'none';
-    if (currentForm !== card.requiresForm) {
-      const fizzleEntry = logEntry(
-        `${player.name} played ${card.name} — wrong form, no effect!`,
-        { playerId, cardId }
-      );
-      await updateRoom(roomCode, {
-        [`players.${playerId}.hand`]: hand,
-        [`discardPiles.${playerId}`]: discard,
-        lastAction:          fizzleEntry,
-        actionLog:           pushLog(roomState.actionLog, fizzleEntry),
-        cardsPlayedThisTurn: (roomState.cardsPlayedThisTurn || 0) + 1,
-      });
-      return;
-    }
-  }
-
-  // Form-dependent card (Gift of Silvanus) — select symbols by current form
-  let symbolsToResolve = card?.symbols;
-  if (card?.formDependent) {
+  // Build symbols: base always active, formBonus appended if matching form
+  let symbolsToResolve = card?.symbols || [];
+  if (card?.formBonus) {
     const form = roomState.players[playerId].jaheiraForm ?? 'none';
-    if (form === 'bear')      symbolsToResolve = card.bearSymbols;
-    else if (form === 'wolf') symbolsToResolve = card.wolfSymbols;
-    else {
-      const fizzleEntry = logEntry(
-        `${player.name} played ${card.name} — no form active, fizzled!`,
-        { playerId, cardId }
-      );
-      await updateRoom(roomCode, {
-        [`players.${playerId}.hand`]: hand,
-        [`discardPiles.${playerId}`]: discard,
-        lastAction:          fizzleEntry,
-        actionLog:           pushLog(roomState.actionLog, fizzleEntry),
-        cardsPlayedThisTurn: (roomState.cardsPlayedThisTurn || 0) + 1,
-      });
-      return;
-    }
+    const bonus = card.formBonus[form];
+    if (bonus?.length) symbolsToResolve = [...symbolsToResolve, ...bonus];
   }
 
   // Resolve symbols against state with card already removed from hand/discard
@@ -283,6 +253,7 @@ function applySymbols(symbols, context, players, decks, discardPiles) {
     switch (sym.type) {
 
       case SYM.ATTACK: {
+        const bonus = context.turnBonusDamage || 0;
         let targets;
         if (sym.target === 'opponent') {
           targets = targetId && players[targetId] && !players[targetId].eliminated && !players[targetId].immune
@@ -291,7 +262,7 @@ function applySymbols(symbols, context, players, decks, discardPiles) {
           targets = getAttackTargets(sym.target, playerId, players);
         }
         for (const tid of targets) {
-          const { newHp, newShields } = applyDamage(players[tid], sym.value);
+          const { newHp, newShields } = applyDamage(players[tid], sym.value + bonus);
           players[tid].hp      = newHp;
           players[tid].shields = newShields;
           if (newHp <= 0) players[tid].eliminated = true;
@@ -332,6 +303,11 @@ function applySymbols(symbols, context, players, decks, discardPiles) {
 
 export function resolveSymbols(symbols, context, roomState) {
   const { playerId } = context;
+  const ctx = {
+    ...context,
+    turnBonusDamage: roomState.turnBonusDamage || 0,
+    turnOrder:       roomState.turnOrder || [],
+  };
 
   const players      = structuredClone(roomState.players);
   const decks        = structuredClone(roomState.decks || {});
@@ -341,7 +317,7 @@ export function resolveSymbols(symbols, context, roomState) {
   const reclaimSyms = symbols.filter(s => s.type === SYM.RECLAIM);
   const otherSyms   = symbols.filter(s => s.type !== SYM.RECLAIM);
 
-  let extraPlays   = applySymbols(otherSyms, context, players, decks, discardPiles);
+  let extraPlays   = applySymbols(otherSyms, ctx, players, decks, discardPiles);
   let pendingReclaim = false;
 
   // Handle RECLAIM (Divine Inspiration)
@@ -399,6 +375,8 @@ export function resolveSymbols(symbols, context, roomState) {
     updates.extraPlaysThisTurn = (roomState.extraPlaysThisTurn || 0) + extraPlays;
   if (pendingReclaim)
     updates.pendingReclaim = playerId;
+  if (ctx.turnBonusDamage !== (roomState.turnBonusDamage || 0))
+    updates.turnBonusDamage = ctx.turnBonusDamage;
 
   return updates;
 }
@@ -442,7 +420,8 @@ function resolveMighty(sym, context, players, decks, discardPiles) {
 
     case 'steal_and_play': {
       // Steal random card from opponent's hand, add to mine + grant extra play
-      if (!targetId || !players[targetId] || players[targetId].immune) break;
+      // Card stealing is NOT blocked by immune — only HP/shield effects are
+      if (!targetId || !players[targetId]) break;
       const targetHand = players[targetId].hand || [];
       if (targetHand.length === 0) break;
       const i = Math.floor(Math.random() * targetHand.length);
@@ -454,8 +433,8 @@ function resolveMighty(sym, context, players, decks, discardPiles) {
     }
 
     case 'steal_card': {
-      // Steal random card from target's hand into mine (no bonus play)
-      if (!targetId || !players[targetId] || players[targetId].immune) break;
+      // Steal random card from target's hand (no bonus play); not blocked by immune
+      if (!targetId || !players[targetId]) break;
       const targetHand = players[targetId].hand || [];
       if (targetHand.length === 0) break;
       const i = Math.floor(Math.random() * targetHand.length);
@@ -467,7 +446,8 @@ function resolveMighty(sym, context, players, decks, discardPiles) {
 
     case 'pickpocket': {
       // Steal top card of opponent's deck, resolve its effects, return to their discard
-      if (!targetId || !players[targetId] || players[targetId].eliminated || players[targetId].immune) break;
+      // Not blocked by immune — only HP/shield effects are
+      if (!targetId || !players[targetId] || players[targetId].eliminated) break;
       let targetDeck = decks[targetId] || [];
       if (targetDeck.length === 0) {
         // Reshuffle their discard if deck is empty
@@ -506,8 +486,93 @@ function resolveMighty(sym, context, players, decks, discardPiles) {
     case 'destroy_shields': {
       const targets = sym.target === 'all_opponents'
         ? Object.keys(players).filter(pid => pid !== playerId && !players[pid].eliminated && !players[pid].immune)
-        : Object.keys(players).filter(pid => !players[pid].eliminated);
+        : Object.keys(players).filter(pid => !players[pid].eliminated && !players[pid].immune);
       for (const tid of targets) players[tid].shields = 0;
+      break;
+    }
+
+    case 'destroy_one_shield': {
+      if (!targetId || !players[targetId] || players[targetId].immune) break;
+      players[targetId].shields = 0;
+      break;
+    }
+
+    case 'battle_roar': {
+      for (const pid of Object.keys(players)) {
+        if (!players[pid].eliminated) {
+          discardPiles[pid] = [...(discardPiles[pid] || []), ...(players[pid].hand || [])];
+          players[pid].hand = [];
+          const { deck, discard: nd, drawn } = drawCards(decks[pid] || [], discardPiles[pid] || [], 3);
+          decks[pid] = deck;
+          discardPiles[pid] = nd;
+          players[pid].hand = drawn;
+        }
+      }
+      extraPlays++;
+      break;
+    }
+
+    case 'whirling_axes': {
+      const aliveOpps = Object.keys(players).filter(
+        pid => pid !== playerId && !players[pid].eliminated && !players[pid].immune
+      );
+      players[playerId].hp = Math.min(10, players[playerId].hp + aliveOpps.length);
+      for (const tid of aliveOpps) {
+        const { newHp, newShields } = applyDamage(players[tid], 1);
+        players[tid].hp      = newHp;
+        players[tid].shields = newShields;
+        if (newHp <= 0) players[tid].eliminated = true;
+      }
+      break;
+    }
+
+    case 'swapportunity_all': {
+      const turnOrder = context.turnOrder || [];
+      const alive = turnOrder.filter(pid => !players[pid]?.eliminated && !players[pid]?.immune);
+      if (alive.length < 2) break;
+      const hpSnapshot = alive.map(pid => players[pid].hp);
+      // Each player gives HP to the player on their right → rotate right
+      const rotated = [hpSnapshot[hpSnapshot.length - 1], ...hpSnapshot.slice(0, -1)];
+      alive.forEach((pid, i) => {
+        players[pid].hp = Math.max(0, rotated[i]);
+        if (players[pid].hp <= 0) players[pid].eliminated = true;
+      });
+      break;
+    }
+
+    case 'favored_frienemies': {
+      context.turnBonusDamage = (context.turnBonusDamage || 0) + 1;
+      extraPlays++;
+      break;
+    }
+
+    case 'scouting_outing': {
+      const opponents = Object.keys(players).filter(
+        pid => pid !== playerId && !players[pid].eliminated
+      );
+      for (const oid of opponents) {
+        let targetDeck = decks[oid] || [];
+        if (targetDeck.length === 0) {
+          const targetDiscard = discardPiles[oid] || [];
+          if (targetDiscard.length === 0) continue;
+          targetDeck = shuffle(targetDiscard);
+          discardPiles[oid] = [];
+          decks[oid] = targetDeck;
+        }
+        const stolen = targetDeck[0];
+        decks[oid] = targetDeck.slice(1);
+        players[playerId].hand = [...(players[playerId].hand || []), stolen];
+      }
+      break;
+    }
+
+    case 'commune_with_nature': {
+      const { deck, discard: nd2, drawn } = drawCards(decks[playerId] || [], discardPiles[playerId] || [], 2);
+      decks[playerId] = deck;
+      discardPiles[playerId] = nd2;
+      players[playerId].hand = [...(players[playerId].hand || []), ...drawn];
+      const formCards = new Set(['jaheira_wolf_form', 'jaheira_bear_form']);
+      if ((players[playerId].hand || []).some(cid => formCards.has(cid))) extraPlays++;
       break;
     }
   }
