@@ -390,7 +390,7 @@ export function applyDamage(player, amount) {
   let shields = player.shields || 0;
   let hp      = player.hp;
 
-  const danageToShields = Math.min(shields, amount);
+  const damageToShields = Math.min(shields, amount);
   shields -= damageToShields;
   
   const remainingDamage = amount - damageToShields;
