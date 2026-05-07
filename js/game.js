@@ -597,11 +597,15 @@ function resolveMighty(sym, context, players, decks, discardPiles) {
     }
 
     case 'set_form':
-      players[playerId].jaheiraForm = sym.value;
+      if (players[playerId].heroId === 'jaheira') {
+        players[playerId].jaheiraForm = sym.value;
+      }
       break;
 
     case 'set_immune':
-      players[playerId].immune = true;
+      if (players[playerId].heroId === 'oriax') {
+        players[playerId].immune = true;
+      }
       break;
 
     case 'destroy_shields': {
@@ -682,7 +686,7 @@ function resolveMighty(sym, context, players, decks, discardPiles) {
     }
 
     case 'scouting_outing': {
-      // Like Pickpocket but for each opponent: steal top, use non-mighty effects, return to owner's discard
+      // Steal top card from each opponent's deck into Minsc's hand
       const opps = Object.keys(players).filter(pid => pid !== playerId && !players[pid].eliminated);
       for (const oid of opps) {
         let oDeck = decks[oid] || [];
@@ -694,15 +698,7 @@ function resolveMighty(sym, context, players, decks, discardPiles) {
         }
         const stolenId = oDeck[0];
         decks[oid] = oDeck.slice(1);
-
-        const stolenCard = CARDS[stolenId];
-        if (stolenCard?.symbols) {
-          const nonMighty = stolenCard.symbols.filter(
-            s => s.type !== SYM.MIGHTY && s.type !== SYM.RECLAIM
-          );
-          applySymbols(nonMighty, { ...context, cardId: stolenId }, players, decks, discardPiles);
-        }
-        discardPiles[oid] = [...(discardPiles[oid] || []), stolenId];
+        players[playerId].hand = [...(players[playerId].hand || []), stolenId];
       }
       break;
     }
