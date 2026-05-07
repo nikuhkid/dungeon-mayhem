@@ -774,7 +774,7 @@ function updateGameButtons(state) {
   const countdownEl = document.getElementById('end-turn-countdown');
 
   if (canEnd && !endTurnTimer) {
-    endTurnTick = 3;
+    endTurnTick = 5;
     countdownEl.textContent = `Ending turn in ${endTurnTick}s`;
     countdownEl.classList.remove('hidden');
     const tick = () => {

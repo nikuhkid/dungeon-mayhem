@@ -606,13 +606,11 @@ button.secondary {
 #hand-area {
   display: flex;
   gap: 0.5rem;
-  flex-wrap: nowrap;
-  overflow-x: auto;
+  flex-wrap: wrap;
   padding: 0.25rem 0 0.5rem;
   min-height: 170px;
-  align-items: flex-end;
-  scrollbar-width: thin;
-  scrollbar-color: var(--border) transparent;
+  align-items: flex-start;
+  align-content: flex-start;
 }
 
 .empty-hand {
@@ -721,7 +719,7 @@ button.secondary {
   z-index: 20;
 }
 
-/* Self bottom row: piles + hand actions */
+/* Self bottom row: piles + hand section */
 #self-bottom {
   display: flex;
   align-items: flex-start;
@@ -729,11 +727,21 @@ button.secondary {
   margin-top: 0.5rem;
 }
 
-/* Pile area */
+/* Pile area — vertical column on the left */
 #pile-area {
   display: flex;
+  flex-direction: column;
   gap: 1rem;
   flex-shrink: 0;
+}
+
+/* Hand section — wraps hand-area + hand-actions */
+#hand-section {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  gap: 0.5rem;
+  min-width: 0;
 }
 
 #draw-pile-wrap, #discard-pile-wrap {
@@ -754,14 +762,14 @@ button.secondary {
 /* Draw pile — stacked cards */
 #draw-pile {
   position: relative;
-  width: 70px;
-  height: 105px;
+  width: 140px;
+  height: 210px;
 }
 
 .pile-card-back {
   position: absolute;
-  width: 70px;
-  height: 105px;
+  width: 140px;
+  height: 210px;
   object-fit: fill;
   border: 2px solid var(--border2);
 }
@@ -784,8 +792,8 @@ button.secondary {
 }
 
 .pile-empty {
-  width: 70px;
-  height: 105px;
+  width: 140px;
+  height: 210px;
   border: 2px dashed var(--border2);
   display: flex;
   align-items: center;
@@ -797,8 +805,8 @@ button.secondary {
 
 /* Discard pile */
 #discard-pile {
-  width: 70px;
-  height: 105px;
+  width: 140px;
+  height: 210px;
   position: relative;
 }
 
@@ -814,10 +822,10 @@ button.secondary {
 /* Hand actions */
 #hand-actions {
   display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  justify-content: center;
-  flex: 1;
+  flex-direction: row;
+  gap: 0.75rem;
+  align-items: center;
+  flex-wrap: wrap;
 }
 
 #turn-hint {
@@ -1223,12 +1231,12 @@ button.secondary {
 
 .heart { line-height: 1; user-select: none; }
 
-.heart-full  { color: var(--red); text-shadow: 0 0 4px rgba(232,69,69,0.5); }
-.heart-empty { color: var(--border2); opacity: 0.35; }
+.heart-full  { color: var(--red); text-shadow: 0 0 6px rgba(232,69,69,0.7); }
+.heart-empty { color: var(--border2); opacity: 0.3; }
 
 /* sizes per context */
-.opp-stats .hp-hearts  .heart { font-size: 0.72rem; }
-.self-stats .hp-hearts  .heart { font-size: 0.9rem; }
+.opp-stats .hp-hearts  .heart { font-size: 1.1rem; }
+.self-stats .hp-hearts  .heart { font-size: 1.4rem; }
 .standing-row .hp-hearts .heart { font-size: 0.6rem; }
 
 /* =========================== CARD ZOOM PREVIEW === */
@@ -1285,8 +1293,8 @@ body.card-preview .hand-card:hover {
 
 .table-card {
   position: relative;
-  width: 68px;
-  height: 102px;
+  width: 272px;
+  height: 408px;
   box-shadow: var(--px-shadow);
   border: 2px solid var(--border);
   flex-shrink: 0;

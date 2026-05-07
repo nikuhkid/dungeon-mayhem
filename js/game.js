@@ -135,7 +135,20 @@ export async function startTurn(roomCode, playerId, roomState) {
   const entry = logEntry(`${roomState.players[playerId].name}'s turn`, { playerId });
   const actionLog = pushLog(roomState.actionLog, entry);
 
-  const updates = {
+  // Flush all previously staged played cards to owner's discard
+  const updates = {};
+  for (const [pid, played] of Object.entries(roomState.playedThisTurn || {})) {
+    if (!played || played.length === 0) continue;
+    for (const cid of played) {
+      const ownerId = cardOwnerId(roomState.players, cid) ?? pid;
+      const key = `discardPiles.${ownerId}`;
+      const base = updates[key] ?? roomState.discardPiles?.[ownerId] ?? [];
+      updates[key] = [...base, cid];
+    }
+    updates[`playedThisTurn.${pid}`] = [];
+  }
+
+  Object.assign(updates, {
     [`decks.${playerId}`]:              deck,
     [`discardPiles.${playerId}`]:       discard,
     [`players.${playerId}.hand`]:       newHand,
@@ -148,7 +161,7 @@ export async function startTurn(roomCode, playerId, roomState) {
     pendingPickpocket:   null,
     lastAction:          entry,
     actionLog,
-  };
+  });
 
   if (roomState.players[playerId]?.immune) {
     updates[`players.${playerId}.immune`] = false;
@@ -165,18 +178,6 @@ export async function endTurn(roomCode, roomState, playerId) {
     pendingShieldPick:   null,
     pendingPickpocket:   null,
   };
-
-  // Flush staged played cards to owner's discard (stolen cards go back to their hero's owner)
-  const pPlayed = roomState.playedThisTurn?.[playerId] || [];
-  if (pPlayed.length > 0) {
-    for (const cid of pPlayed) {
-      const ownerId = cardOwnerId(roomState.players, cid) ?? playerId;
-      const key = `discardPiles.${ownerId}`;
-      const base = updates[key] ?? roomState.discardPiles?.[ownerId] ?? [];
-      updates[key] = [...base, cid];
-    }
-    updates[`playedThisTurn.${playerId}`] = [];
-  }
 
   updates[`players.${playerId}.frienemiesBonus`] = 0;
 
