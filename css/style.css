@@ -34,12 +34,17 @@
   --px-shadow-lg: 5px 5px 0 #000;
 }
 
+html {
+  height: 100%;
+}
+
 body {
   background: var(--bg);
   color: var(--text);
   font-family: monospace;
   font-size: 14px;
-  min-height: 100vh;
+  height: 100%;
+  overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -333,14 +338,14 @@ button.secondary {
 /* =========================== GAME SCREEN === */
 
 #screen-game {
-  max-width: 1200px;
+  width: min(100vw, 177.78vh);
+  height: min(100vh, 56.25vw);
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
-  min-height: 100vh;
-  padding: 0.75rem 1.5rem;
+  padding: 0.5rem 0.75rem;
   align-items: stretch;
-  align-self: stretch;
+  overflow: hidden;
 }
 
 /* Turn indicator */
@@ -402,6 +407,8 @@ button.secondary {
   grid-template-columns: 1fr 200px;
   gap: 0.75rem;
   flex: 1;
+  min-height: 0;
+  overflow: hidden;
 }
 
 /* Opponents area */
@@ -410,6 +417,7 @@ button.secondary {
   flex-wrap: wrap;
   gap: 0.75rem;
   align-content: flex-start;
+  overflow-y: auto;
 }
 
 .opponent-panel {
@@ -561,6 +569,8 @@ button.secondary {
   border: 2px solid var(--border2);
   padding: 0.75rem;
   box-shadow: var(--px-shadow);
+  flex-shrink: 0;
+  overflow: hidden;
 }
 
 #self-panel.active-turn {
@@ -1274,6 +1284,9 @@ body.card-preview .hand-card:hover {
   border: 2px solid var(--border2);
   border-top: none;
   box-shadow: var(--px-shadow);
+  overflow: auto;
+  max-height: 45vh;
+  flex-shrink: 0;
 }
 
 .table-label {
