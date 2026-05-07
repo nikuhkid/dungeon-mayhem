@@ -159,7 +159,7 @@ export const CARDS = {
     description: 'Draw 2 cards',
   },
   lia_finger_wag: {
-    id: 'lia_finger_wag', heroId: 'lia', name: 'Finger-wag of Judgement', count: 2,
+    id: 'lia_finger_wag', heroId: 'lia', name: 'Finger-wag of Judgment', count: 2,
     symbols: [again(), again()],
     description: 'Play again twice (2 Stamina)',
   },

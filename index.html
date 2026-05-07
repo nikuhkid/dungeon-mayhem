@@ -4,19 +4,22 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Dungeon Mayhem</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
 
   <!-- HOME SCREEN -->
   <div id="screen-home" class="screen">
-    <h1>Dungeon Mayhem</h1>
+    <h1>Dungeon<br>Mayhem</h1>
     <div id="home-actions">
       <input type="text" id="player-name-input" placeholder="Your name" maxlength="20" />
       <button id="btn-create-room">Create Room</button>
       <div id="join-row">
         <input type="text" id="room-code-input" placeholder="XXXX" maxlength="4" />
-        <button id="btn-join-room">Join Room</button>
+        <button id="btn-join-room">Join</button>
       </div>
     </div>
     <div id="home-error" class="error-msg"></div>
@@ -30,16 +33,28 @@
       <h3>Choose your hero</h3>
       <div id="hero-list"></div>
     </div>
-    <button id="btn-ready" disabled>Lock In</button>
-    <button id="btn-start-game" class="hidden">Start Game</button>
+    <div id="lobby-actions">
+      <button id="btn-ready" disabled>Lock In</button>
+      <button id="btn-start-game" class="hidden">Start Game</button>
+      <button id="btn-add-bot" class="hidden secondary">+ Bot</button>
+    </div>
     <div id="lobby-status"></div>
+  </div>
+
+  <!-- HERO INFO MODAL -->
+  <div id="hero-info-modal" class="hidden">
+    <div id="hero-info-backdrop"></div>
+    <div id="hero-info-content">
+      <img id="hero-info-img" src="" alt="Hero Info" />
+      <button id="btn-close-hero-info">Close</button>
+    </div>
   </div>
 
   <!-- SHIELD PICK MODAL (Charm / Sneak Attack! / Mighty Toss) -->
   <div id="shield-pick-modal" class="hidden">
     <div id="shield-pick-backdrop"></div>
     <div id="shield-pick-content">
-      <h3 id="shield-pick-title">🛡️ Choose a shield card</h3>
+      <h3 id="shield-pick-title">Choose a shield card</h3>
       <div id="shield-pick-cards"></div>
     </div>
   </div>
@@ -48,7 +63,7 @@
   <div id="reclaim-modal" class="hidden">
     <div id="reclaim-backdrop"></div>
     <div id="reclaim-content">
-      <h3>📜 Divine Inspiration — Choose a card to reclaim</h3>
+      <h3>Divine Inspiration — Reclaim a card</h3>
       <div id="reclaim-cards"></div>
     </div>
   </div>
@@ -56,32 +71,50 @@
   <!-- GAME SCREEN -->
   <div id="screen-game" class="screen hidden">
     <div id="turn-indicator"></div>
+    <div id="pickpocket-reveal" class="hidden">
+      <span id="pickpocket-label">Pickpocketed: </span>
+      <span id="pickpocket-card-name"></span>
+      <span id="pickpocket-hint"></span>
+    </div>
     <div id="target-prompt" class="hidden">
-      <span>🎯 Select a target — click an opponent</span>
+      <span>Select a target — click an opponent</span>
       <button id="btn-cancel-target" class="secondary">Cancel</button>
     </div>
     <div id="game-main">
       <div id="opponents-area"></div>
-      <div id="action-log"><h4>Action Log</h4><div id="log-entries"></div></div>
+      <div id="action-log"><h4>Log</h4><div id="log-entries"></div></div>
     </div>
     <div id="self-panel">
       <div id="self-info"></div>
       <div id="hand-area"></div>
-      <div id="hand-actions">
-        <div id="end-turn-countdown" class="hidden"></div>
-        <span id="turn-hint"></span>
+      <div id="self-bottom">
+        <div id="pile-area">
+          <div id="draw-pile-wrap">
+            <div id="draw-pile"></div>
+            <div class="pile-label">DECK</div>
+          </div>
+          <div id="discard-pile-wrap">
+            <div id="discard-pile"></div>
+            <div class="pile-label">DISCARD</div>
+          </div>
+        </div>
+        <div id="hand-actions">
+          <div id="end-turn-countdown" class="hidden"></div>
+          <span id="turn-hint"></span>
+        </div>
       </div>
     </div>
   </div>
 
   <!-- WIN SCREEN -->
   <div id="screen-win" class="screen hidden">
-    <div id="win-crown">🏆</div>
+    <div id="win-crown">★</div>
     <h1>Victory!</h1>
     <div id="win-hero"></div>
     <div id="win-player"></div>
     <div id="final-standings"></div>
-    <button id="btn-play-again">Back to Home</button>
+    <button id="btn-play-again">Play Again</button>
+    <button id="btn-leave-room" class="secondary">Leave Room</button>
   </div>
 
   <script type="module" src="js/ui.js"></script>

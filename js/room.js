@@ -1,6 +1,33 @@
 import { roomExists, createRoom, joinRoom, updateRoom, updatePlayer, subscribeToRoom } from './firebase.js';
 import { HEROES } from './cards.js';
 
+export async function addBot(roomCode, roomState) {
+  const players     = roomState.players || {};
+  const existingBots = Object.keys(players).filter(id => id.startsWith('bot_'));
+  const botId       = `bot_${existingBots.length + 1}`;
+
+  const takenHeroes = new Set(Object.values(players).map(p => p.heroId).filter(Boolean));
+  const available   = Object.keys(HEROES).filter(h => !takenHeroes.has(h));
+  if (available.length === 0) throw new Error('No heroes available for bot');
+
+  const heroId = available[Math.floor(Math.random() * available.length)];
+  const hero   = HEROES[heroId];
+
+  await updateRoom(roomCode, {
+    [`players.${botId}`]: {
+      name:            `Bot (${hero.name})`,
+      heroId,
+      hp:              10,
+      hand:            [],
+      ready:           true,
+      eliminated:      false,
+      shieldCards:     [],
+      immune:          false,
+      frienemiesBonus: 0,
+    },
+  });
+}
+
 export function generateRoomCode() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
   return Array.from({ length: 4 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');

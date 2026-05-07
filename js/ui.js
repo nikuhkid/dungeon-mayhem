@@ -1,7 +1,8 @@
-import { getOrCreatePlayerId, handleCreateRoom, handleJoinRoom, selectHero, setReady, startGameIfReady, isHost } from './room.js';
+import { getOrCreatePlayerId, handleCreateRoom, handleJoinRoom, selectHero, setReady, startGameIfReady, isHost, addBot } from './room.js';
 import { subscribeToRoom } from './firebase.js';
-import { HEROES, CARDS, SYM, symbolsToIcons, cardNeedsTarget } from './cards.js';
-import { startGame, startTurn, endTurn, playCard, reclaimCard, resolveShieldPick } from './game.js';
+import { HEROES, CARDS, SYM, cardNeedsTarget } from './cards.js';
+import { startGame, startTurn, endTurn, playCard, reclaimCard, resolveShieldPick, resolvePickpocket, resetRoom } from './game.js';
+import { isBot, driveBotTurn } from './bot.js';
 
 // --- Module state ---
 let playerId       = getOrCreatePlayerId();
@@ -9,14 +10,36 @@ let roomCode       = null;
 let roomState      = null;
 
 // Game-screen local state
-let lastTurnPlayer    = null;
-let drawingInProgress = false;
-let playingCard       = false;
-let pendingCard       = null;
-let selectingTarget   = false;
-let currentScreen     = null;
-let endTurnTimer      = null;
-let endTurnTick       = 0;
+let lastTurnPlayer          = null;
+let drawingInProgress       = false;
+let playingCard             = false;
+let pendingCard             = null;
+let selectingTarget         = false;
+let currentScreen           = null;
+let endTurnTimer            = null;
+let endTurnTick             = 0;
+let pickpocketTargetMode    = false;
+let pickpocketAutoResolving = false;
+
+// --- Image path helpers ---
+
+function cardSlug(name) {
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+}
+
+function cardImg(cardId) {
+  const card = CARDS[cardId];
+  if (!card) return '';
+  return `assets/cards/${cardSlug(card.name)}.png`;
+}
+
+function heroBackImg(heroId) {
+  return `assets/backs/${heroId}.png`;
+}
+
+function heroInfoImg(heroId) {
+  return `assets/heroes/${heroId}_info.png`;
+}
 
 // --- Screen routing ---
 
@@ -65,12 +88,21 @@ function initHome() {
     codeInput.value = codeInput.value.toUpperCase().replace(/[^A-Z]/g, '');
   });
 
-  document.getElementById('btn-play-again').addEventListener('click', () => {
+  document.getElementById('btn-play-again').addEventListener('click', async () => {
+    if (!roomCode || !roomState) return;
+    await resetRoom(roomCode, roomState);
+  });
+
+  document.getElementById('btn-leave-room').addEventListener('click', () => {
     sessionStorage.removeItem('roomCode');
     roomCode  = null;
     roomState = null;
     showScreen('screen-home');
   });
+
+  // Hero info modal
+  document.getElementById('hero-info-backdrop').addEventListener('click', closeHeroInfoModal);
+  document.getElementById('btn-close-hero-info').addEventListener('click', closeHeroInfoModal);
 }
 
 function enterLobby(code) {
@@ -80,6 +112,27 @@ function enterLobby(code) {
   showScreen('screen-lobby');
   subscribeAndRoute(code);
 }
+
+// --- Hero info modal ---
+
+function openHeroInfoModal(heroId) {
+  const img = document.getElementById('hero-info-img');
+  const hero = HEROES[heroId];
+  img.src = heroInfoImg(heroId);
+  img.alt = hero?.name ?? heroId;
+  document.getElementById('hero-info-modal').classList.remove('hidden');
+}
+
+function closeHeroInfoModal() {
+  document.getElementById('hero-info-modal').classList.add('hidden');
+}
+
+// Global delegation for hero info buttons (works from both lobby and game screen)
+document.body.addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-hero-info]');
+  if (!btn) return;
+  openHeroInfoModal(btn.dataset.heroInfo);
+});
 
 // --- Lobby screen ---
 
@@ -103,11 +156,24 @@ function initLobby() {
   });
 
   document.getElementById('hero-list').addEventListener('click', async (e) => {
+    // Info button handled by body delegation — skip here
+    if (e.target.closest('.hero-info-btn')) return;
     const card = e.target.closest('.hero-card');
-    if (!card || card.disabled || card.classList.contains('taken')) return;
+    if (!card || card.classList.contains('taken')) return;
     if (!roomCode) return;
     if (roomState?.players[playerId]?.ready) return;
     await selectHero(roomCode, playerId, card.dataset.hero);
+  });
+
+  document.getElementById('btn-add-bot').addEventListener('click', async () => {
+    if (!roomCode || !roomState) return;
+    if (!isHost(roomState, playerId)) return;
+    try {
+      await addBot(roomCode, roomState);
+    } catch (e) {
+      document.getElementById('lobby-status').textContent = e.message;
+      setTimeout(() => { document.getElementById('lobby-status').textContent = ''; }, 3000);
+    }
   });
 }
 
@@ -128,8 +194,9 @@ function renderLobby(state) {
     return `<div class="lobby-player${pid === playerId ? ' is-me' : ''}">
       <span class="player-name">${escHtml(p.name)}</span>
       ${hostBadge}
-      ${hero ? `<span class="hero-pick" style="color:${hero.color}">${hero.emoji} ${hero.name}</span>`
-             : '<span class="hero-pick muted">No hero selected</span>'}
+      ${hero
+        ? `<span class="hero-pick" style="color:${hero.color}">${hero.name}</span>`
+        : '<span class="hero-pick muted">No hero selected</span>'}
       ${readyBadge}
     </div>`;
   }).join('');
@@ -145,28 +212,38 @@ function renderLobby(state) {
     heroListEl.innerHTML = Object.values(HEROES).map(h => {
       const taken    = takenByOthers.has(h.id);
       const selected = me?.heroId === h.id;
-      return `<button class="hero-card${selected ? ' selected' : ''}${taken ? ' taken' : ''}"
-                      data-hero="${h.id}" ${taken ? 'disabled' : ''}
+      return `<div class="hero-card${selected ? ' selected' : ''}${taken ? ' taken' : ''}"
+                      data-hero="${h.id}"
                       style="--hero-color:${h.color}">
-        <span class="hero-emoji">${h.emoji}</span>
-        <span class="hero-name">${h.name}</span>
-        <span class="hero-class">${h.class}</span>
+        <img class="hero-card-back" src="${heroBackImg(h.id)}" alt="${escHtml(h.name)}" draggable="false">
+        <div class="hero-card-info">
+          <span class="hero-name">${escHtml(h.name)}</span>
+          <span class="hero-class">${escHtml(h.class)}</span>
+        </div>
         ${taken ? '<span class="taken-label">Taken</span>' : ''}
-      </button>`;
+        <div class="hero-info-btn" data-hero-info="${h.id}">?</div>
+      </div>`;
     }).join('');
   }
 
   const btnReady = document.getElementById('btn-ready');
   btnReady.disabled    = !me?.heroId || !!me?.ready;
-  btnReady.textContent = me?.ready ? 'Locked In ✓' : 'Lock In';
+  btnReady.textContent = me?.ready ? 'Locked In' : 'Lock In';
 
-  const btnStart = document.getElementById('btn-start-game');
+  const btnStart  = document.getElementById('btn-start-game');
+  const btnAddBot = document.getElementById('btn-add-bot');
   if (isHost(state, playerId)) {
     btnStart.classList.remove('hidden');
     const allReady = playerEntries.every(([, p]) => p.heroId && p.ready);
     btnStart.disabled = !(allReady && playerEntries.length >= 2);
+
+    const takenHeroes  = new Set(playerEntries.map(([, p]) => p.heroId).filter(Boolean));
+    const heroesLeft   = Object.keys(HEROES).filter(h => !takenHeroes.has(h)).length;
+    const canAddBot    = playerEntries.length < 6 && heroesLeft > 0;
+    btnAddBot.classList.toggle('hidden', !canAddBot);
   } else {
     btnStart.classList.add('hidden');
+    btnAddBot.classList.add('hidden');
   }
 
   const total = playerEntries.length;
@@ -178,13 +255,22 @@ function renderLobby(state) {
 // --- Game screen ---
 
 function initGame() {
-  document.getElementById('btn-cancel-target').addEventListener('click', () => {
+  document.getElementById('btn-cancel-target').addEventListener('click', async () => {
+    if (pickpocketTargetMode) {
+      pickpocketTargetMode    = false;
+      selectingTarget         = false;
+      pickpocketAutoResolving = false;
+      hidePickpocketReveal();
+      if (roomState?.pendingPickpocket?.pickerId === playerId) {
+        await resolvePickpocket(roomCode, roomState, playerId, null);
+      }
+      return;
+    }
     pendingCard     = null;
     selectingTarget = false;
     if (roomState) renderGame(roomState);
   });
 
-  // Target click on opponent panel
   document.getElementById('opponents-area').addEventListener('click', async (e) => {
     if (!selectingTarget || playingCard) return;
     const panel = e.target.closest('.opponent-panel');
@@ -195,6 +281,20 @@ function initGame() {
     if (!target || target.eliminated) return;
     const aliveCount = Object.values(roomState.players).filter(p => !p.eliminated).length;
     if (target.immune && aliveCount > 2) return;
+
+    if (pickpocketTargetMode) {
+      pickpocketTargetMode    = false;
+      selectingTarget         = false;
+      pickpocketAutoResolving = false;
+      hidePickpocketReveal();
+      playingCard = true;
+      try {
+        await resolvePickpocket(roomCode, roomState, playerId, tid);
+      } finally {
+        playingCard = false;
+      }
+      return;
+    }
 
     const cid       = pendingCard;
     pendingCard     = null;
@@ -207,12 +307,11 @@ function initGame() {
     }
   });
 
-  // Play card from hand
   document.getElementById('hand-area').addEventListener('click', async (e) => {
     if (selectingTarget || playingCard) return;
     if (!roomState || roomState.currentTurn !== playerId) return;
     if (roomState.turnPhase !== 'playing') return;
-    if (roomState.pendingReclaim || roomState.pendingShieldPick) return;
+    if (roomState.pendingReclaim || roomState.pendingShieldPick || roomState.pendingPickpocket) return;
 
     const played = roomState.cardsPlayedThisTurn || 0;
     const extra  = roomState.extraPlaysThisTurn  || 0;
@@ -224,7 +323,6 @@ function initGame() {
     const card = CARDS[cid];
     const me   = roomState.players[playerId];
 
-    // Determine if this card needs a target (base symbols + active formBonus)
     let needsTarget = cardNeedsTarget(card);
     if (!needsTarget && card?.formBonus) {
       const form = me?.jaheiraForm ?? 'none';
@@ -237,6 +335,7 @@ function initGame() {
       selectingTarget = true;
       renderGame(roomState);
     } else {
+      cardEl.classList.add('card-exit');
       playingCard = true;
       try {
         await playCard(roomCode, roomState, playerId, cid, null);
@@ -246,7 +345,6 @@ function initGame() {
     }
   });
 
-  // Shield pick modal: pick which shield card to steal/destroy
   document.getElementById('shield-pick-cards').addEventListener('click', async (e) => {
     if (playingCard) return;
     const cardEl = e.target.closest('.shield-pick-card');
@@ -260,7 +358,6 @@ function initGame() {
     }
   });
 
-  // Reclaim modal: pick a card from discard
   document.getElementById('reclaim-cards').addEventListener('click', async (e) => {
     if (playingCard) return;
     const cardEl = e.target.closest('.reclaim-card');
@@ -280,14 +377,12 @@ function renderGame(state) {
     showScreen('screen-game');
   }
 
-  // Reclaim modal
   if (state.pendingReclaim === playerId) {
     showReclaimModal(state.discardPiles[playerId] || []);
     return;
   }
   hideReclaimModal();
 
-  // Shield pick modal
   if (state.pendingShieldPick?.pickerId === playerId) {
     const pick = state.pendingShieldPick;
     showShieldPickModal(state.players[pick.targetId]?.shieldCards || [], pick.effect);
@@ -295,16 +390,50 @@ function renderGame(state) {
   }
   hideShieldPickModal();
 
-  // Reset target selection when turn changes away from us
   if (state.currentTurn !== lastTurnPlayer) {
     lastTurnPlayer = state.currentTurn;
     if (state.currentTurn !== playerId) {
-      selectingTarget = false;
-      pendingCard     = null;
+      selectingTarget         = false;
+      pendingCard             = null;
+      pickpocketTargetMode    = false;
+      pickpocketAutoResolving = false;
+    } else {
+      playTurnSound();
     }
   }
 
-  // Auto-draw when it's our turn, not eliminated, and phase is 'drawing'
+  if (state.pendingPickpocket?.pickerId === playerId) {
+    const pick     = state.pendingPickpocket;
+    const card     = CARDS[pick.stolenCardId];
+    const hasAttack = card?.symbols?.some(s => s.type === SYM.ATTACK && s.target === 'opponent');
+    showPickpocketReveal(pick.stolenCardId, hasAttack);
+    if (hasAttack && !pickpocketTargetMode) {
+      pickpocketTargetMode = true;
+      selectingTarget      = true;
+    }
+    if (!hasAttack && !pickpocketAutoResolving) {
+      pickpocketAutoResolving = true;
+      setTimeout(async () => {
+        pickpocketAutoResolving = false;
+        if (roomState?.pendingPickpocket?.pickerId === playerId) {
+          await resolvePickpocket(roomCode, roomState, playerId, null);
+        }
+      }, 1500);
+    }
+    renderTurnIndicator(state);
+    renderTargetPrompt();
+    renderOpponents(state);
+    renderSelf(state);
+    renderHand(state);
+    renderActionLog(state);
+    updateGameButtons(state);
+    return;
+  }
+  hidePickpocketReveal();
+  if (!pickpocketTargetMode) {
+    pickpocketAutoResolving = false;
+  }
+
   const meEliminated = state.players[playerId]?.eliminated;
   if (state.currentTurn === playerId && state.turnPhase === 'drawing' && !drawingInProgress && !meEliminated) {
     drawingInProgress = true;
@@ -331,9 +460,11 @@ function showReclaimModal(discardPile) {
     ? '<p class="muted-msg">Discard pile is empty</p>'
     : discardPile.map(cid => {
         const card = CARDS[cid];
+        const name = card?.name ?? cid;
+        const src  = cardImg(cid);
         return `<div class="reclaim-card" data-cid="${cid}">
-          <div class="card-name">${card?.name ?? cid}</div>
-          <div class="card-symbols">${symbolsToIcons(card?.symbols || [])}</div>
+          <img src="${src}" alt="${escHtml(name)}" draggable="false">
+          <div class="card-tooltip">${escHtml(name)}</div>
         </div>`;
       }).join('');
 
@@ -352,16 +483,19 @@ function showShieldPickModal(shieldCards, effect) {
   const cardsEl = document.getElementById('shield-pick-cards');
 
   title.textContent = effect === 'steal_shield'
-    ? '🛡️ Choose a shield card to steal'
-    : '💥 Choose a shield card to destroy';
+    ? 'Choose a shield card to steal'
+    : 'Choose a shield card to destroy';
 
   cardsEl.innerHTML = shieldCards.length === 0
     ? '<p class="muted-msg">No shield cards in play</p>'
     : shieldCards.map(sc => {
         const card = CARDS[sc.cardId];
+        const name = card?.name ?? sc.cardId;
+        const src  = cardImg(sc.cardId);
         return `<div class="shield-pick-card" data-sid="${sc.id}">
-          <div class="card-name">${card?.name ?? sc.cardId}</div>
-          <div class="shield-remaining">🛡️ ${sc.remaining} remaining</div>
+          <img src="${src}" alt="${escHtml(name)}" draggable="false">
+          <div class="card-tooltip">${escHtml(name)}</div>
+          <div class="shield-remaining">shield: ${sc.remaining}</div>
         </div>`;
       }).join('');
 
@@ -378,12 +512,11 @@ function renderTurnIndicator(state) {
   const el = document.getElementById('turn-indicator');
   const isMyTurn = state.currentTurn === playerId;
   if (isMyTurn) {
-    el.textContent = '⚡ Your Turn!';
+    el.textContent = '>> Your Turn!';
     el.className   = 'my-turn';
   } else {
     const who  = state.players[state.currentTurn];
-    const hero = who?.heroId ? HEROES[who.heroId] : null;
-    el.textContent = `${hero?.emoji ?? ''} ${who?.name ?? '?'}'s Turn`;
+    el.textContent = `${escHtml(who?.name ?? '?')}'s Turn`;
     el.className   = '';
   }
 }
@@ -397,37 +530,45 @@ function formBadge(player) {
   if (player.heroId !== 'jaheira') return '';
   const form = player.jaheiraForm;
   if (!form || form === 'none') return '';
-  const label = form === 'bear' ? '🐻 Bear Form' : '🐺 Wolf Form';
+  const label = form === 'bear' ? 'Bear Form' : 'Wolf Form';
   const cls   = form === 'bear' ? 'form-bear' : 'form-wolf';
   return `<span class="form-badge ${cls}">${label}</span>`;
 }
 
 function immuneBadge(player) {
-  return player.immune ? '<span class="immune-badge">🥷 Hidden</span>' : '';
+  return player.immune ? '<span class="immune-badge">Hidden</span>' : '';
 }
 
 function renderOpponents(state) {
-  const opponents  = Object.entries(state.players).filter(([pid]) => pid !== playerId);
+  const ordered = (state.turnOrder || Object.keys(state.players))
+    .filter(pid => pid !== playerId)
+    .map(pid => [pid, state.players[pid]])
+    .filter(([, p]) => p);
   const aliveCount = Object.values(state.players).filter(p => !p.eliminated).length;
 
-  document.getElementById('opponents-area').innerHTML = opponents.map(([pid, p]) => {
-    const hero      = p.heroId ? HEROES[p.heroId] : null;
-    const hpPct     = Math.max(0, Math.min(100, (p.hp / 10) * 100));
-    // Immune players can be targeted in 2-player (effects still fizzle)
+  document.getElementById('opponents-area').innerHTML = ordered.map(([pid, p]) => {
+    const hero         = p.heroId ? HEROES[p.heroId] : null;
+    const hpPct        = Math.max(0, Math.min(100, (p.hp / 10) * 100));
     const isTargetable = selectingTarget && !p.eliminated && (!p.immune || aliveCount <= 2);
-    const selClass  = isTargetable ? ' selectable' : '';
-    const elimClass = p.eliminated ? ' eliminated' : '';
+    const isActive     = state.currentTurn === pid;
+    const selClass     = isTargetable ? ' selectable' : '';
+    const elimClass    = p.eliminated ? ' eliminated' : '';
+    const actClass     = isActive ? ' active-turn' : '';
 
-    return `<div class="opponent-panel${selClass}${elimClass}" data-pid="${pid}">
-      <div class="opp-hero-name">${hero?.emoji ?? '?'} ${escHtml(p.name)} ${formBadge(p)} ${immuneBadge(p)}</div>
+    return `<div class="opponent-panel${selClass}${elimClass}${actClass}" data-pid="${pid}">
+      <div class="opp-hero-name">
+        ${escHtml(p.name)}
+        ${hero ? `<span class="opp-hero-class" style="color:${hero.color}">${escHtml(hero.name)}</span>` : ''}
+        ${formBadge(p)} ${immuneBadge(p)}
+      </div>
       <div class="hp-bar-wrap"><div class="hp-bar-fill" style="width:${hpPct}%"></div></div>
       <div class="opp-stats">
-        <span class="stat-hp">❤️ ${p.hp}/10</span>
-        ${(p.shieldCards || []).map(sc => `<span class="stat-shield shield-card-badge" title="${CARDS[sc.cardId]?.name ?? sc.cardId}">🛡️${sc.remaining}</span>`).join('')}
+        <span class="stat-hp">HP: ${p.hp}/10</span>
+        ${(p.shieldCards || []).map(sc => `<span class="stat-shield shield-card-badge" title="${escHtml(CARDS[sc.cardId]?.name ?? sc.cardId)}">shld:${sc.remaining}</span>`).join('')}
         ${p.eliminated ? '<span class="elim-badge">Eliminated</span>' : ''}
       </div>
-      <div class="opp-card-count">🃏 ${(p.hand || []).length} card${(p.hand || []).length !== 1 ? 's' : ''}</div>
-      ${isTargetable ? '<div class="target-hint">Click to target</div>' : ''}
+      <div class="opp-card-count">${(p.hand || []).length} card${(p.hand || []).length !== 1 ? 's' : ''} in hand</div>
+      ${isTargetable ? '<div class="target-hint">[ click to target ]</div>' : ''}
     </div>`;
   }).join('');
 }
@@ -436,10 +577,14 @@ function renderSelf(state) {
   const me = state.players[playerId];
   if (!me) return;
 
+  document.getElementById('self-panel').classList.toggle('active-turn', state.currentTurn === playerId);
+
   if (me.eliminated) {
     document.getElementById('self-info').innerHTML =
-      '<div class="eliminated-self">💀 You have been eliminated — spectating</div>';
+      '<div class="eliminated-self">You have been eliminated — spectating</div>';
     document.getElementById('hand-area').innerHTML = '';
+    document.getElementById('draw-pile').innerHTML  = '';
+    document.getElementById('discard-pile').innerHTML = '';
     return;
   }
 
@@ -448,16 +593,52 @@ function renderSelf(state) {
 
   document.getElementById('self-info').innerHTML = `
     <div class="self-hero-name">
-      ${hero?.emoji ?? '?'} ${escHtml(me.name)}
-      <span class="hero-class-label">${hero?.class ?? ''}</span>
+      ${escHtml(me.name)}
+      <span class="hero-class-label">${escHtml(hero?.class ?? '')}</span>
       ${formBadge(me)}
       ${immuneBadge(me)}
+      ${hero ? `<span class="hero-info-link" data-hero-info="${me.heroId}">?</span>` : ''}
     </div>
     <div class="hp-bar-wrap large"><div class="hp-bar-fill" style="width:${hpPct}%"></div></div>
     <div class="self-stats">
-      <span class="stat-hp">❤️ ${me.hp} / 10</span>
-      ${(me.shieldCards || []).map(sc => `<span class="stat-shield shield-card-badge" title="${CARDS[sc.cardId]?.name ?? sc.cardId}">🛡️${sc.remaining}</span>`).join('')}
+      <span class="stat-hp">HP: ${me.hp} / 10</span>
+      ${(me.shieldCards || []).map(sc => `<span class="stat-shield shield-card-badge" title="${escHtml(CARDS[sc.cardId]?.name ?? sc.cardId)}">shld:${sc.remaining}</span>`).join('')}
     </div>`;
+
+  renderPiles(state);
+}
+
+function renderPiles(state) {
+  const me = state.players[playerId];
+  if (!me?.heroId) return;
+
+  const deckCards = state.decks?.[playerId] || [];
+  const discard   = state.discardPiles?.[playerId] || [];
+  const backSrc   = heroBackImg(me.heroId);
+  const deckCount = deckCards.length;
+
+  // Draw pile
+  const drawEl = document.getElementById('draw-pile');
+  if (deckCount === 0) {
+    drawEl.innerHTML = '<div class="pile-empty">—</div>';
+  } else {
+    const layers = Math.min(3, deckCount);
+    const backs  = Array.from({ length: layers }, () =>
+      `<img class="pile-card-back" src="${backSrc}" alt="" draggable="false">`
+    ).join('');
+    drawEl.innerHTML = `${backs}<div class="pile-count-badge">${deckCount}</div>`;
+  }
+
+  // Discard pile
+  const discardEl = document.getElementById('discard-pile');
+  if (discard.length === 0) {
+    discardEl.innerHTML = '<div class="pile-empty">—</div>';
+  } else {
+    const topCid = discard[discard.length - 1];
+    const src    = cardImg(topCid);
+    const name   = CARDS[topCid]?.name ?? topCid;
+    discardEl.innerHTML = `<img src="${src}" alt="${escHtml(name)}" draggable="false">`;
+  }
 }
 
 function isFormBlocked(card, me) {
@@ -465,22 +646,12 @@ function isFormBlocked(card, me) {
   return false;
 }
 
-function cardIcons(card, me) {
-  if (card?.formBonus) {
-    const form = me?.jaheiraForm ?? 'none';
-    const bonus = card.formBonus[form];
-    const allSyms = bonus?.length ? [...(card.symbols || []), ...bonus] : (card.symbols || []);
-    return symbolsToIcons(allSyms);
-  }
-  return symbolsToIcons(card?.symbols);
-}
-
 function cardDesc(card, me) {
   if (card?.formBonus) {
     const form = me?.jaheiraForm ?? 'none';
     if (form !== 'none') {
-      const tag = form === 'bear' ? '🐻 Bear bonus' : '🐺 Wolf bonus';
-      return `${card.description ?? ''} (${tag} active)`;
+      const tag = form === 'bear' ? 'Bear bonus active' : 'Wolf bonus active';
+      return `${card.description ?? ''} (${tag})`;
     }
   }
   return card?.description ?? '';
@@ -493,7 +664,7 @@ function renderHand(state) {
   const isMyTurn = state.currentTurn === playerId && state.turnPhase === 'playing';
   const played   = state.cardsPlayedThisTurn || 0;
   const extra    = state.extraPlaysThisTurn  || 0;
-  const canPlay  = isMyTurn && !selectingTarget && !state.pendingReclaim && !state.pendingShieldPick && (played === 0 || played <= extra);
+  const canPlay  = isMyTurn && !selectingTarget && !state.pendingReclaim && !state.pendingShieldPick && !state.pendingPickpocket && (played === 0 || played <= extra);
 
   document.getElementById('hand-area').innerHTML = (me.hand || []).map(cid => {
     const card      = CARDS[cid];
@@ -505,16 +676,19 @@ function renderHand(state) {
       blocked             ? 'form-locked' : '',
     ].filter(Boolean).join(' ');
 
-    let formLabel = '';
-    if (blocked && card?.requiresForm) {
-      formLabel = `<div class="form-lock-label">${card.requiresForm === 'bear' ? '🐻' : '🐺'} ${card.requiresForm} form only</div>`;
-    }
+    const src     = cardImg(cid);
+    const tooltip = card
+      ? `${card.name}${card.description ? ' — ' + cardDesc(card, me) : ''}`
+      : cid;
+
+    const lockOverlay = blocked && card?.requiresForm
+      ? `<div class="form-lock-overlay"><span>${card.requiresForm} form only</span></div>`
+      : '';
 
     return `<div class="hand-card${classes ? ' ' + classes : ''}" data-cid="${cid}">
-      <div class="card-name">${card?.name ?? cid}</div>
-      <div class="card-symbols">${cardIcons(card, me)}</div>
-      <div class="card-desc">${cardDesc(card, me)}</div>
-      ${formLabel}
+      <img src="${src}" alt="${escHtml(card?.name ?? cid)}" draggable="false">
+      <div class="card-tooltip">${escHtml(tooltip)}</div>
+      ${lockOverlay}
     </div>`;
   }).join('') || '<div class="empty-hand">No cards in hand</div>';
 }
@@ -531,7 +705,7 @@ function updateGameButtons(state) {
   const isMyTurn = state.currentTurn === playerId && state.turnPhase === 'playing' && !me?.eliminated;
   const played   = state.cardsPlayedThisTurn || 0;
   const extra    = state.extraPlaysThisTurn  || 0;
-  const canEnd   = isMyTurn && played >= 1 && played > extra && !state.pendingReclaim && !state.pendingShieldPick;
+  const canEnd   = isMyTurn && played >= 1 && played > extra && !state.pendingReclaim && !state.pendingShieldPick && !state.pendingPickpocket;
 
   const countdownEl = document.getElementById('end-turn-countdown');
 
@@ -564,17 +738,59 @@ function updateGameButtons(state) {
   if (me?.eliminated || !isMyTurn) {
     hint.textContent = '';
   } else if (state.pendingReclaim === playerId) {
-    hint.textContent = '📜 Choose a card to reclaim';
+    hint.textContent = 'Choose a card to reclaim';
   } else if (state.pendingShieldPick?.pickerId === playerId) {
-    hint.textContent = '🛡️ Choose a shield card';
+    hint.textContent = 'Choose a shield card';
   } else if (played === 0) {
     hint.textContent = 'Play a card to end your turn';
   } else if (played <= extra) {
     const left = extra - played + 1;
-    hint.textContent = `⚡ ${left} extra play${left !== 1 ? 's' : ''} remaining`;
+    hint.textContent = `${left} extra play${left !== 1 ? 's' : ''} remaining`;
   } else {
     hint.textContent = '';
   }
+}
+
+// --- Audio ---
+
+function playTurnSound() {
+  try {
+    const ac   = new (window.AudioContext || window.webkitAudioContext)();
+    const gain = ac.createGain();
+    gain.connect(ac.destination);
+    gain.gain.setValueAtTime(0.12, ac.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + 0.5);
+
+    const o1 = ac.createOscillator();
+    o1.type = 'sine';
+    o1.frequency.setValueAtTime(523, ac.currentTime);
+    o1.connect(gain);
+    o1.start(ac.currentTime);
+    o1.stop(ac.currentTime + 0.18);
+
+    const o2 = ac.createOscillator();
+    o2.type = 'sine';
+    o2.frequency.setValueAtTime(784, ac.currentTime + 0.15);
+    o2.connect(gain);
+    o2.start(ac.currentTime + 0.15);
+    o2.stop(ac.currentTime + 0.45);
+  } catch (_) {}
+}
+
+// --- Pickpocket reveal ---
+
+function showPickpocketReveal(cardId, hasAttack) {
+  const el   = document.getElementById('pickpocket-reveal');
+  const card = CARDS[cardId];
+  document.getElementById('pickpocket-card-name').textContent = card?.name ?? cardId;
+  document.getElementById('pickpocket-hint').textContent = hasAttack
+    ? 'Attack card — choose a target'
+    : 'Resolving automatically...';
+  el.classList.remove('hidden');
+}
+
+function hidePickpocketReveal() {
+  document.getElementById('pickpocket-reveal').classList.add('hidden');
 }
 
 // --- Win screen ---
@@ -587,28 +803,31 @@ function renderWin(state) {
   const hero   = winner?.heroId ? HEROES[winner.heroId] : null;
 
   document.getElementById('win-hero').innerHTML =
-    hero ? `<span style="color:${hero.color}">${hero.emoji} ${hero.name}</span>` : '';
+    hero ? `<span style="color:${hero.color}">${escHtml(hero.name)}</span>` : '';
   document.getElementById('win-player').textContent =
     winner ? `${escHtml(winner.name)} wins!` : '';
 
-  const playerEntries = Object.entries(state.players).sort(([aId, a], [bId, b]) => {
+  const elimOrder    = state.eliminationOrder || [];
+  const playerEntries = Object.entries(state.players).sort(([aId], [bId]) => {
     if (aId === state.winner) return -1;
     if (bId === state.winner) return 1;
-    return (b.hp || 0) - (a.hp || 0);
+    const aIdx = elimOrder.indexOf(aId);
+    const bIdx = elimOrder.indexOf(bId);
+    return bIdx - aIdx;
   });
 
   document.getElementById('final-standings').innerHTML = playerEntries.map(([pid, p], i) => {
-    const h      = p.heroId ? HEROES[p.heroId] : null;
-    const isWin  = pid === state.winner;
-    const hpBar  = Math.max(0, Math.min(100, (p.hp / 10) * 100));
+    const h     = p.heroId ? HEROES[p.heroId] : null;
+    const isWin = pid === state.winner;
+    const hpBar = Math.max(0, Math.min(100, (p.hp / 10) * 100));
+    const rank  = isWin ? '★' : `#${i + 1}`;
     return `<div class="standing-row${isWin ? ' standing-winner' : ''}">
-      <span class="standing-rank">${isWin ? '🏆' : `#${i + 1}`}</span>
-      <span class="standing-hero">${h?.emoji ?? '?'}</span>
+      <span class="standing-rank">${rank}</span>
       <span class="standing-name">${escHtml(p.name)}</span>
-      <span class="standing-hero-name">${h?.name ?? ''}</span>
+      <span class="standing-hero-name">${escHtml(h?.name ?? '')}</span>
       <div class="hp-bar-wrap"><div class="hp-bar-fill" style="width:${hpBar}%"></div></div>
-      <span class="stat-hp">❤️ ${p.hp}/10</span>
-      ${(p.shieldCards || []).map(sc => `<span class="stat-shield shield-card-badge" title="${CARDS[sc.cardId]?.name ?? sc.cardId}">🛡️${sc.remaining}</span>`).join('')}
+      <span class="stat-hp">HP:${p.hp}</span>
+      ${(p.shieldCards || []).map(sc => `<span class="stat-shield shield-card-badge" title="${escHtml(CARDS[sc.cardId]?.name ?? sc.cardId)}">shld:${sc.remaining}</span>`).join('')}
     </div>`;
   }).join('');
 }
@@ -627,7 +846,7 @@ function subscribeAndRoute(code) {
     }
 
     if (state.status === 'lobby')    renderLobby(state);
-    if (state.status === 'playing')  renderGame(state);
+    if (state.status === 'playing')  { renderGame(state); driveBotTurn(roomCode, state); }
     if (state.status === 'finished') renderWin(state);
   });
 }
