@@ -9,6 +9,17 @@ let playerId       = getOrCreatePlayerId();
 let roomCode       = null;
 let roomState      = null;
 
+// Card preview mode
+let cardPreviewMode = localStorage.getItem('cardPreview') === '1';
+
+function applyCardPreview() {
+  document.body.classList.toggle('card-preview', cardPreviewMode);
+  const btn = document.getElementById('btn-preview-toggle');
+  if (!btn) return;
+  btn.textContent = cardPreviewMode ? 'zoom on' : 'zoom off';
+  btn.classList.toggle('preview-on', cardPreviewMode);
+}
+
 // Rolling-screen state
 let rollingAnimated = false;
 let rollingTimer    = null;
@@ -24,6 +35,15 @@ let endTurnTimer            = null;
 let endTurnTick             = 0;
 let pickpocketTargetMode    = false;
 let pickpocketAutoResolving = false;
+
+// --- HP hearts helper ---
+
+function hpHearts(hp, compact = false) {
+  const hearts = Array.from({ length: 10 }, (_, i) =>
+    `<span class="heart ${i < hp ? 'heart-full' : 'heart-empty'}">♥</span>`
+  ).join('');
+  return `<div class="hp-hearts${compact ? ' compact' : ''}">${hearts}</div>`;
+}
 
 // --- Image path helpers ---
 
@@ -259,6 +279,12 @@ function renderLobby(state) {
 // --- Game screen ---
 
 function initGame() {
+  document.getElementById('btn-preview-toggle').addEventListener('click', () => {
+    cardPreviewMode = !cardPreviewMode;
+    localStorage.setItem('cardPreview', cardPreviewMode ? '1' : '0');
+    applyCardPreview();
+  });
+
   document.getElementById('btn-cancel-target').addEventListener('click', async () => {
     if (pickpocketTargetMode) {
       pickpocketTargetMode    = false;
@@ -590,7 +616,6 @@ function renderOpponents(state) {
 
   document.getElementById('opponents-area').innerHTML = ordered.map(([pid, p]) => {
     const hero         = p.heroId ? HEROES[p.heroId] : null;
-    const hpPct        = Math.max(0, Math.min(100, (p.hp / 10) * 100));
     const isTargetable = selectingTarget && !p.eliminated && (!p.immune || aliveCount <= 2);
     const isActive     = state.currentTurn === pid;
     const selClass     = isTargetable ? ' selectable' : '';
@@ -603,9 +628,8 @@ function renderOpponents(state) {
         ${hero ? `<span class="opp-hero-class" style="color:${hero.color}">${escHtml(hero.name)}</span>` : ''}
         ${formBadge(p)} ${immuneBadge(p)}
       </div>
-      <div class="hp-bar-wrap"><div class="hp-bar-fill" style="width:${hpPct}%"></div></div>
       <div class="opp-stats">
-        <span class="stat-hp">HP: ${p.hp}/10</span>
+        ${hpHearts(p.hp)}
         ${(p.shieldCards || []).map(sc => `<span class="stat-shield shield-card-badge" title="${escHtml(CARDS[sc.cardId]?.name ?? sc.cardId)}">shld:${sc.remaining}</span>`).join('')}
         ${p.eliminated ? '<span class="elim-badge">Eliminated</span>' : ''}
       </div>
@@ -630,8 +654,7 @@ function renderSelf(state) {
     return;
   }
 
-  const hero  = me.heroId ? HEROES[me.heroId] : null;
-  const hpPct = Math.max(0, Math.min(100, (me.hp / 10) * 100));
+  const hero = me.heroId ? HEROES[me.heroId] : null;
 
   document.getElementById('self-info').innerHTML = `
     <div class="self-hero-name">
@@ -641,9 +664,8 @@ function renderSelf(state) {
       ${immuneBadge(me)}
       ${hero ? `<span class="hero-info-link" data-hero-info="${me.heroId}">?</span>` : ''}
     </div>
-    <div class="hp-bar-wrap large"><div class="hp-bar-fill" style="width:${hpPct}%"></div></div>
     <div class="self-stats">
-      <span class="stat-hp">HP: ${me.hp} / 10</span>
+      ${hpHearts(me.hp)}
       ${(me.shieldCards || []).map(sc => `<span class="stat-shield shield-card-badge" title="${escHtml(CARDS[sc.cardId]?.name ?? sc.cardId)}">shld:${sc.remaining}</span>`).join('')}
     </div>`;
 
@@ -861,13 +883,12 @@ function renderWin(state) {
   document.getElementById('final-standings').innerHTML = playerEntries.map(([pid, p], i) => {
     const h     = p.heroId ? HEROES[p.heroId] : null;
     const isWin = pid === state.winner;
-    const hpBar = Math.max(0, Math.min(100, (p.hp / 10) * 100));
     const rank  = isWin ? '★' : `#${i + 1}`;
     return `<div class="standing-row${isWin ? ' standing-winner' : ''}">
       <span class="standing-rank">${rank}</span>
       <span class="standing-name">${escHtml(p.name)}</span>
       <span class="standing-hero-name">${escHtml(h?.name ?? '')}</span>
-      <div class="hp-bar-wrap"><div class="hp-bar-fill" style="width:${hpBar}%"></div></div>
+      ${hpHearts(p.hp, true)}
       <span class="stat-hp">HP:${p.hp}</span>
       ${(p.shieldCards || []).map(sc => `<span class="stat-shield shield-card-badge" title="${escHtml(CARDS[sc.cardId]?.name ?? sc.cardId)}">shld:${sc.remaining}</span>`).join('')}
     </div>`;
@@ -994,6 +1015,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initHome();
   initLobby();
   initGame();
+  applyCardPreview();
 
   const savedCode = sessionStorage.getItem('roomCode');
   if (savedCode) {

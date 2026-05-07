@@ -239,7 +239,7 @@ button.secondary {
 .hero-card-back {
   width: 100%;
   aspect-ratio: 2 / 3;
-  object-fit: cover;
+  object-fit: fill;
   border: 1px solid var(--border2);
   display: block;
   pointer-events: none;
@@ -640,7 +640,7 @@ button.secondary {
 .hand-card img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: fill;
   display: block;
   pointer-events: none;
 }
@@ -762,7 +762,7 @@ button.secondary {
   position: absolute;
   width: 70px;
   height: 105px;
-  object-fit: cover;
+  object-fit: fill;
   border: 2px solid var(--border2);
 }
 
@@ -805,7 +805,7 @@ button.secondary {
 #discard-pile img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: fill;
   border: 2px solid var(--border2);
   box-shadow: var(--px-shadow);
   display: block;
@@ -951,7 +951,7 @@ button.secondary {
 .reclaim-card img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: fill;
   display: block;
   pointer-events: none;
 }
@@ -1024,7 +1024,7 @@ button.secondary {
 .shield-pick-card img {
   width: 100%;
   height: 165px;
-  object-fit: cover;
+  object-fit: fill;
   display: block;
   pointer-events: none;
 }
@@ -1161,7 +1161,7 @@ button.secondary {
 
 .standing-row {
   display: grid;
-  grid-template-columns: 2.5rem 1fr 1fr 80px 2.5rem 3rem;
+  grid-template-columns: 2.5rem 1fr 1fr 76px 2.5rem 3rem;
   align-items: center;
   gap: 0.5rem;
   padding: 0.6rem 0.75rem;
@@ -1206,6 +1206,58 @@ button.secondary {
 .take-damage  { animation: take-damage-anim 0.35s steps(4) forwards; }
 .receive-heal { animation: heal-flash-anim 0.5s steps(3) forwards; }
 
+/* =========================== HP HEARTS === */
+
+.hp-hearts {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 2px;
+  align-items: center;
+}
+
+.hp-hearts.compact {
+  flex-wrap: wrap;
+  max-width: 72px;
+  gap: 1px;
+}
+
+.heart { line-height: 1; user-select: none; }
+
+.heart-full  { color: var(--red); text-shadow: 0 0 4px rgba(232,69,69,0.5); }
+.heart-empty { color: var(--border2); opacity: 0.35; }
+
+/* sizes per context */
+.opp-stats .hp-hearts  .heart { font-size: 0.72rem; }
+.self-stats .hp-hearts  .heart { font-size: 0.9rem; }
+.standing-row .hp-hearts .heart { font-size: 0.6rem; }
+
+/* =========================== CARD ZOOM PREVIEW === */
+
+#btn-preview-toggle {
+  font-size: 0.45rem;
+  padding: 0.3rem 0.6rem;
+  margin-left: auto;
+  opacity: 0.7;
+  border-color: var(--border);
+}
+#btn-preview-toggle:hover { opacity: 1; }
+#btn-preview-toggle.preview-on { border-color: var(--gold); color: var(--gold); opacity: 1; }
+
+#hand-area {
+  overflow: visible;
+}
+
+body.card-preview .hand-card {
+  transition: transform 0.14s ease, box-shadow 0.14s, border-color 0.08s;
+}
+
+body.card-preview .hand-card:hover {
+  transform: scale(2.4) translateY(-28%);
+  z-index: 200;
+  border-color: var(--gold);
+  box-shadow: 6px 6px 0 rgba(0,0,0,0.9);
+}
+
 /* =========================== TABLE AREA (cards in play) === */
 
 #table-area {
@@ -1248,7 +1300,7 @@ button.secondary {
 .table-card img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: fill;
   display: block;
 }
 
