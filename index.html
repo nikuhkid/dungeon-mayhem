@@ -118,41 +118,39 @@
 
   <!-- GAME SCREEN -->
   <div id="screen-game" class="screen hidden">
-    <div id="turn-indicator"></div>
-    <div id="pickpocket-reveal" class="hidden">
-      <span id="pickpocket-label">Pickpocketed: </span>
-      <span id="pickpocket-card-name"></span>
-      <span id="pickpocket-hint"></span>
-    </div>
-    <div id="target-prompt" class="hidden">
-      <span>Select a target — click an opponent</span>
-      <button id="btn-cancel-target" class="secondary">Cancel</button>
-    </div>
-    <div id="game-main">
-      <div id="opponents-area"></div>
-      <div id="action-log"><h4>Log</h4><div id="log-entries"></div></div>
-    </div>
-    <div id="table-area" class="hidden"></div>
-    <div id="game-bottom">
-      <div id="pile-area">
-        <div id="draw-pile-wrap">
-          <div id="draw-pile"></div>
-          <div class="pile-label">DECK</div>
-        </div>
-        <div id="discard-pile-wrap">
-          <div id="discard-pile"></div>
-          <div class="pile-label">DISCARD</div>
-        </div>
+    <div id="game-header">
+      <div id="turn-indicator"></div>
+      <div id="pickpocket-reveal" class="hidden">
+        <span id="pickpocket-label">Pickpocketed: </span>
+        <span id="pickpocket-card-name"></span>
+        <span id="pickpocket-hint"></span>
       </div>
-      <div id="self-panel">
-        <div id="self-info"></div>
-        <div id="hand-section">
-          <div id="hand-area"></div>
-          <div id="hand-actions">
-            <div id="end-turn-countdown" class="hidden"></div>
-            <span id="turn-hint"></span>
-            <button id="btn-preview-toggle" class="secondary">zoom off</button>
-          </div>
+      <div id="target-prompt" class="hidden">
+        <span>Select a target — click an opponent</span>
+        <button id="btn-cancel-target" class="secondary">Cancel</button>
+      </div>
+    </div>
+    <div id="pile-area">
+      <div id="draw-pile-wrap">
+        <div id="draw-pile"></div>
+        <div class="pile-label">DECK</div>
+      </div>
+      <div id="discard-pile-wrap">
+        <div id="discard-pile"></div>
+        <div class="pile-label">DISCARD</div>
+      </div>
+    </div>
+    <div id="opponents-area"></div>
+    <div id="action-log"><h4>Log</h4><div id="log-entries"></div></div>
+    <div id="table-area" class="hidden"></div>
+    <div id="self-panel">
+      <div id="self-info"></div>
+      <div id="hand-section">
+        <div id="hand-area"></div>
+        <div id="hand-actions">
+          <div id="end-turn-countdown" class="hidden"></div>
+          <span id="turn-hint"></span>
+          <button id="btn-preview-toggle" class="secondary">zoom off</button>
         </div>
       </div>
     </div>

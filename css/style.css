@@ -333,15 +333,33 @@ button.secondary {
 /* =========================== GAME SCREEN === */
 
 #screen-game {
-  max-width: 1200px;
+  max-width: 1600px;
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: 160px 1fr 220px;
+  grid-template-rows: auto auto auto auto;
+  grid-template-areas:
+    "header  header  header"
+    "piles   opps    log"
+    "piles   table   log"
+    "piles   self    log";
+  gap: 0.5rem 0.75rem;
+  padding: 0.75rem;
+  align-items: start;
+}
+
+#game-header {
+  grid-area: header;
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
-  min-height: 100vh;
-  padding: 0.75rem 1.5rem;
-  align-items: stretch;
-  align-self: stretch;
+  gap: 0.4rem;
 }
+
+#pile-area     { grid-area: piles; align-self: start; }
+#opponents-area { grid-area: opps; }
+#action-log    { grid-area: log;   align-self: stretch; }
+#table-area    { grid-area: table; }
+#self-panel    { grid-area: self; }
 
 /* Turn indicator */
 #turn-indicator {
@@ -396,13 +414,6 @@ button.secondary {
   box-shadow: none;
 }
 
-/* Game main grid */
-#game-main {
-  display: grid;
-  grid-template-columns: 1fr 200px;
-  gap: 0.75rem;
-  flex: 1;
-}
 
 /* Opponents area */
 #opponents-area {
@@ -778,12 +789,6 @@ button.secondary {
   z-index: 20;
 }
 
-/* Game bottom — piles outside box + self panel */
-#game-bottom {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.75rem;
-}
 
 /* Pile area — vertical column outside self-panel */
 #pile-area {
