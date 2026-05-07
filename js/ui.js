@@ -48,7 +48,7 @@ function hpHearts(hp, compact = false) {
 // --- Image path helpers ---
 
 function cardSlug(name) {
-  return name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+  return name.toLowerCase().replace(/'/g, '').replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
 }
 
 function cardImg(cardId) {
