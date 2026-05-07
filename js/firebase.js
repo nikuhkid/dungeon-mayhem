@@ -15,13 +15,12 @@ import {
 // Firebase Console → Project Settings → Your apps → Config
 // ============================================================
 const firebaseConfig = {
-  /* REPLACE WITH YOUR CONFIG */
-  apiKey: "AIzaSyBFjoTu7MpeX9_7MF6Dl-0LDmFkXM4_clE",
-  authDomain: "dungeonmayhem-6c52e.firebaseapp.com",
-  projectId: "dungeonmayhem-6c52e",
-  storageBucket: "dungeonmayhem-6c52e.firebasestorage.app",
-  messagingSenderId: "789284571553",
-  appId: "1:789284571553:web:a30c3991582cd074bea3e0"
+  apiKey: "AIzaSyAdLxpkzBjjdzZ29HGDEvhPGXn8DBmpLa8",
+  authDomain: "games-rooms.firebaseapp.com",
+  projectId: "games-rooms",
+  storageBucket: "games-rooms.firebasestorage.app",
+  messagingSenderId: "1023357290194",
+  appId: "1:1023357290194:web:f9f0bd056690a31af20f0b"
 };
 // ============================================================
 
