@@ -154,8 +154,6 @@ export async function startTurn(roomCode, playerId, roomState) {
     updates[`players.${playerId}.immune`] = false;
   }
 
-  updates[`players.${playerId}.frienemiesBonus`] = 0;
-
   await updateRoom(roomCode, updates);
 }
 
@@ -179,6 +177,8 @@ export async function endTurn(roomCode, roomState, playerId) {
     }
     updates[`playedThisTurn.${playerId}`] = [];
   }
+
+  updates[`players.${playerId}.frienemiesBonus`] = 0;
 
   const nextId = getNextTurn(roomState.turnOrder, playerId, roomState.players);
   const entry  = logEntry(`${roomState.players[playerId].name} ended their turn`, { playerId });
