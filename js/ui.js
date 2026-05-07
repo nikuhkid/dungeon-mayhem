@@ -426,6 +426,7 @@ function renderGame(state) {
     }
     renderTurnIndicator(state);
     renderTargetPrompt();
+    renderTableArea(state);
     renderOpponents(state);
     renderSelf(state);
     renderHand(state);
@@ -447,6 +448,7 @@ function renderGame(state) {
 
   renderTurnIndicator(state);
   renderTargetPrompt();
+  renderTableArea(state);
   renderOpponents(state);
   renderSelf(state);
   renderHand(state);
@@ -511,6 +513,42 @@ function hideShieldPickModal() {
 }
 
 // --- Game render helpers ---
+
+function renderTableArea(state) {
+  const el = document.getElementById('table-area');
+  const order = state.turnOrder || Object.keys(state.players);
+  const allPlayed = [];
+
+  for (const pid of order) {
+    const cards = state.playedThisTurn?.[pid] || [];
+    if (cards.length === 0) continue;
+    const p = state.players[pid];
+    for (const cid of cards) {
+      allPlayed.push({ cid, pid, pname: p?.name ?? pid });
+    }
+  }
+
+  if (allPlayed.length === 0) {
+    el.classList.add('hidden');
+    el.innerHTML = '';
+    return;
+  }
+
+  el.classList.remove('hidden');
+  el.innerHTML = `<div class="table-label">Cards in play</div>
+    <div class="table-cards">
+      ${allPlayed.map(({ cid, pid, pname }) => {
+        const card   = CARDS[cid];
+        const src    = cardImg(cid);
+        const isMe   = pid === playerId;
+        return `<div class="table-card${isMe ? ' table-card-mine' : ''}">
+          <img src="${src}" alt="${escHtml(card?.name ?? cid)}" draggable="false">
+          <div class="card-tooltip">${escHtml(card?.name ?? cid)}</div>
+          <div class="table-card-owner">${escHtml(pname)}</div>
+        </div>`;
+      }).join('')}
+    </div>`;
+}
 
 function renderTurnIndicator(state) {
   const el = document.getElementById('turn-indicator');

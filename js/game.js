@@ -107,6 +107,7 @@ export async function startGame(roomCode, roomState) {
 
   updates.decks = decks;
   updates.discardPiles = discardPiles;
+  updates.playedThisTurn = {};
 
   updates.eliminationOrder = [];
 
@@ -129,9 +130,10 @@ export async function startTurn(roomCode, playerId, roomState) {
   const actionLog = pushLog(roomState.actionLog, entry);
 
   const updates = {
-    [`decks.${playerId}`]:           deck,
-    [`discardPiles.${playerId}`]:    discard,
-    [`players.${playerId}.hand`]:    newHand,
+    [`decks.${playerId}`]:              deck,
+    [`discardPiles.${playerId}`]:       discard,
+    [`players.${playerId}.hand`]:       newHand,
+    [`playedThisTurn.${playerId}`]:     [],
     turnPhase:           'playing',
     cardsPlayedThisTurn: 0,
     extraPlaysThisTurn:  0,
@@ -159,6 +161,14 @@ export async function endTurn(roomCode, roomState, playerId) {
     pendingShieldPick:   null,
     pendingPickpocket:   null,
   };
+
+  // Flush staged played cards to discard pile
+  const pPlayed = roomState.playedThisTurn?.[playerId] || [];
+  if (pPlayed.length > 0) {
+    const currentDiscard = roomState.discardPiles?.[playerId] || [];
+    updates[`discardPiles.${playerId}`]   = [...currentDiscard, ...pPlayed];
+    updates[`playedThisTurn.${playerId}`] = [];
+  }
 
   const nextId = getNextTurn(roomState.turnOrder, playerId, roomState.players);
   const entry  = logEntry(`${roomState.players[playerId].name} ended their turn`, { playerId });
@@ -189,7 +199,7 @@ export async function playCard(roomCode, roomState, playerId, cardId, targetId =
   if (idx === -1) return;
 
   hand.splice(idx, 1);
-  const discard = [...(roomState.discardPiles[playerId] || []), cardId];
+  const played = [...(roomState.playedThisTurn?.[playerId] || []), cardId];
   const card = CARDS[cardId];
 
   const targetName = targetId ? roomState.players[targetId]?.name : null;
@@ -199,8 +209,8 @@ export async function playCard(roomCode, roomState, playerId, cardId, targetId =
   );
 
   const updates = {
-    [`players.${playerId}.hand`]: hand,
-    [`discardPiles.${playerId}`]: discard,
+    [`players.${playerId}.hand`]:       hand,
+    [`playedThisTurn.${playerId}`]:     played,
     lastAction:          entry,
     actionLog:           pushLog(roomState.actionLog, entry),
     cardsPlayedThisTurn: (roomState.cardsPlayedThisTurn || 0) + 1,
@@ -217,8 +227,8 @@ export async function playCard(roomCode, roomState, playerId, cardId, targetId =
   if (symbolsToResolve?.length) {
     const stateForEffect = {
       ...roomState,
-      players:      { ...roomState.players,      [playerId]: { ...player, hand } },
-      discardPiles: { ...roomState.discardPiles, [playerId]: discard },
+      players:          { ...roomState.players, [playerId]: { ...player, hand } },
+      playedThisTurn:   { ...roomState.playedThisTurn, [playerId]: played },
     };
     const effectUpdates = resolveSymbols(symbolsToResolve, { playerId, targetId, cardId }, stateForEffect);
     Object.assign(updates, effectUpdates);
@@ -441,10 +451,8 @@ export function resolveSymbols(symbols, context, roomState) {
   for (const _sym of reclaimSyms) {
     const disc = discardPiles[playerId] || [];
     if (disc.length === 0) {
-      const { deck, discard: nd, drawn, reshuffled } = drawCards(decks[playerId] || [], [], 1);
-      decks[playerId]        = deck;
-      discardPiles[playerId] = nd;
-      players[playerId].hand = [...(players[playerId].hand || []), ...drawn];
+      // Nothing to reclaim — divine inspiration grants 2 HP instead
+      players[playerId].hp = Math.min(10, players[playerId].hp + 2);
     } else {
       pendingReclaim = true;
     }
@@ -759,6 +767,7 @@ export async function resetRoom(roomCode, roomState) {
     pendingPickpocket:   null,
     eliminationOrder:    [],
     rolls:               {},
+    playedThisTurn:      {},
   };
 
   for (const pid of Object.keys(roomState.players)) {
