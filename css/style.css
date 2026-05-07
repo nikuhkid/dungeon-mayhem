@@ -440,10 +440,69 @@ button.secondary {
   box-shadow: 3px 3px 0 var(--gold-dark);
 }
 
+/* Hero flip card */
+.opp-header {
+  display: flex;
+  gap: 0.6rem;
+  align-items: flex-start;
+  margin-bottom: 0.4rem;
+}
+
+.opp-details { flex: 1; min-width: 0; }
+
+.hero-flip {
+  flex-shrink: 0;
+  perspective: 500px;
+  cursor: pointer;
+}
+
+.hero-flip-sm { width: 54px; height: 81px; }
+.hero-flip-md { width: 70px; height: 105px; }
+
+.hero-flip-inner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+  transition: transform 0.45s ease;
+}
+
+.hero-flip.flipped .hero-flip-inner { transform: rotateY(180deg); }
+
+.hero-flip-front,
+.hero-flip-back {
+  position: absolute;
+  inset: 0;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+.hero-flip-front img,
+.hero-flip-back img {
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+  display: block;
+  border: 2px solid var(--border2);
+  box-shadow: var(--px-shadow);
+}
+
+.hero-flip-back { transform: rotateY(180deg); }
+
+/* Self hero flip */
+.self-hero-flip-wrap {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  margin-bottom: 0.4rem;
+}
+
+.self-hero-details { flex: 1; min-width: 0; }
+
 .opp-hero-name {
   font-family: 'Press Start 2P', monospace;
   font-size: 0.55rem;
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.35rem;
   line-height: 1.6;
 }
 
@@ -719,15 +778,14 @@ button.secondary {
   z-index: 20;
 }
 
-/* Self bottom row: piles + hand section */
-#self-bottom {
+/* Game bottom — piles outside box + self panel */
+#game-bottom {
   display: flex;
   align-items: flex-start;
-  gap: 1.25rem;
-  margin-top: 0.5rem;
+  gap: 0.75rem;
 }
 
-/* Pile area — vertical column on the left */
+/* Pile area — vertical column outside self-panel */
 #pile-area {
   display: flex;
   flex-direction: column;
@@ -742,6 +800,7 @@ button.secondary {
   flex: 1;
   gap: 0.5rem;
   min-width: 0;
+  margin-top: 0.5rem;
 }
 
 #draw-pile-wrap, #discard-pile-wrap {
@@ -1235,8 +1294,8 @@ button.secondary {
 .heart-empty { color: var(--border2); opacity: 0.3; }
 
 /* sizes per context */
-.opp-stats .hp-hearts  .heart { font-size: 1.1rem; }
-.self-stats .hp-hearts  .heart { font-size: 1.4rem; }
+.opp-stats .hp-hearts  .heart { font-size: 1.4rem; }
+.self-stats .hp-hearts  .heart { font-size: 1.8rem; }
 .standing-row .hp-hearts .heart { font-size: 0.6rem; }
 
 /* =========================== CARD ZOOM PREVIEW === */

@@ -65,6 +65,15 @@ function heroInfoImg(heroId) {
   return `assets/heroes/${heroId}_info.png`;
 }
 
+function heroFlipCard(heroId, size = 'sm') {
+  return `<div class="hero-flip hero-flip-${size}" data-flip>
+    <div class="hero-flip-inner">
+      <div class="hero-flip-front"><img src="${heroBackImg(heroId)}" alt="" draggable="false"></div>
+      <div class="hero-flip-back"><img src="${heroInfoImg(heroId)}" alt="" draggable="false"></div>
+    </div>
+  </div>`;
+}
+
 // --- Screen routing ---
 
 function showScreen(id) {
@@ -156,6 +165,13 @@ document.body.addEventListener('click', (e) => {
   const btn = e.target.closest('[data-hero-info]');
   if (!btn) return;
   openHeroInfoModal(btn.dataset.heroInfo);
+});
+
+// Hero flip cards
+document.body.addEventListener('click', (e) => {
+  const flip = e.target.closest('[data-flip]');
+  if (!flip) return;
+  flip.classList.toggle('flipped');
 });
 
 // --- Lobby screen ---
@@ -623,17 +639,22 @@ function renderOpponents(state) {
     const actClass     = isActive ? ' active-turn' : '';
 
     return `<div class="opponent-panel${selClass}${elimClass}${actClass}" data-pid="${pid}">
-      <div class="opp-hero-name">
-        ${escHtml(p.name)}
-        ${hero ? `<span class="opp-hero-class" style="color:${hero.color}">${escHtml(hero.name)}</span>` : ''}
-        ${formBadge(p)} ${immuneBadge(p)}
+      <div class="opp-header">
+        ${hero ? heroFlipCard(p.heroId, 'sm') : ''}
+        <div class="opp-details">
+          <div class="opp-hero-name">
+            ${escHtml(p.name)}
+            ${hero ? `<span class="opp-hero-class" style="color:${hero.color}">${escHtml(hero.name)}</span>` : ''}
+            ${formBadge(p)} ${immuneBadge(p)}
+          </div>
+          <div class="opp-stats">
+            ${hpHearts(p.hp)}
+            ${(p.shieldCards || []).map(sc => `<span class="stat-shield shield-card-badge" title="${escHtml(CARDS[sc.cardId]?.name ?? sc.cardId)}">shld:${sc.remaining}</span>`).join('')}
+            ${p.eliminated ? '<span class="elim-badge">Eliminated</span>' : ''}
+          </div>
+          <div class="opp-card-count">${(p.hand || []).length} card${(p.hand || []).length !== 1 ? 's' : ''} in hand</div>
+        </div>
       </div>
-      <div class="opp-stats">
-        ${hpHearts(p.hp)}
-        ${(p.shieldCards || []).map(sc => `<span class="stat-shield shield-card-badge" title="${escHtml(CARDS[sc.cardId]?.name ?? sc.cardId)}">shld:${sc.remaining}</span>`).join('')}
-        ${p.eliminated ? '<span class="elim-badge">Eliminated</span>' : ''}
-      </div>
-      <div class="opp-card-count">${(p.hand || []).length} card${(p.hand || []).length !== 1 ? 's' : ''} in hand</div>
       ${isTargetable ? '<div class="target-hint">[ click to target ]</div>' : ''}
     </div>`;
   }).join('');
@@ -657,16 +678,20 @@ function renderSelf(state) {
   const hero = me.heroId ? HEROES[me.heroId] : null;
 
   document.getElementById('self-info').innerHTML = `
-    <div class="self-hero-name">
-      ${escHtml(me.name)}
-      <span class="hero-class-label">${escHtml(hero?.class ?? '')}</span>
-      ${formBadge(me)}
-      ${immuneBadge(me)}
-      ${hero ? `<span class="hero-info-link" data-hero-info="${me.heroId}">?</span>` : ''}
-    </div>
-    <div class="self-stats">
-      ${hpHearts(me.hp)}
-      ${(me.shieldCards || []).map(sc => `<span class="stat-shield shield-card-badge" title="${escHtml(CARDS[sc.cardId]?.name ?? sc.cardId)}">shld:${sc.remaining}</span>`).join('')}
+    <div class="self-hero-flip-wrap">
+      ${hero ? heroFlipCard(me.heroId, 'md') : ''}
+      <div class="self-hero-details">
+        <div class="self-hero-name">
+          ${escHtml(me.name)}
+          <span class="hero-class-label">${escHtml(hero?.class ?? '')}</span>
+          ${formBadge(me)}
+          ${immuneBadge(me)}
+        </div>
+        <div class="self-stats">
+          ${hpHearts(me.hp)}
+          ${(me.shieldCards || []).map(sc => `<span class="stat-shield shield-card-badge" title="${escHtml(CARDS[sc.cardId]?.name ?? sc.cardId)}">shld:${sc.remaining}</span>`).join('')}
+        </div>
+      </div>
     </div>`;
 
   renderPiles(state);
