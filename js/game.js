@@ -3,6 +3,12 @@ import { updateRoom } from './firebase.js';
 
 // --- Internal helpers ---
 
+function cardOwnerId(players, cardId) {
+  const heroId = CARDS[cardId]?.heroId;
+  if (!heroId) return null;
+  return Object.entries(players).find(([, p]) => p.heroId === heroId)?.[0] ?? null;
+}
+
 function shieldUid() {
   return `sc_${Date.now()}_${Math.floor(Math.random() * 100000)}`;
 }
@@ -162,11 +168,15 @@ export async function endTurn(roomCode, roomState, playerId) {
     pendingPickpocket:   null,
   };
 
-  // Flush staged played cards to discard pile
+  // Flush staged played cards to owner's discard (stolen cards go back to their hero's owner)
   const pPlayed = roomState.playedThisTurn?.[playerId] || [];
   if (pPlayed.length > 0) {
-    const currentDiscard = roomState.discardPiles?.[playerId] || [];
-    updates[`discardPiles.${playerId}`]   = [...currentDiscard, ...pPlayed];
+    for (const cid of pPlayed) {
+      const ownerId = cardOwnerId(roomState.players, cid) ?? playerId;
+      const key = `discardPiles.${ownerId}`;
+      const base = updates[key] ?? roomState.discardPiles?.[ownerId] ?? [];
+      updates[key] = [...base, cid];
+    }
     updates[`playedThisTurn.${playerId}`] = [];
   }
 
@@ -603,9 +613,7 @@ function resolveMighty(sym, context, players, decks, discardPiles) {
       break;
 
     case 'set_immune':
-      if (players[playerId].heroId === 'oriax') {
-        players[playerId].immune = true;
-      }
+      players[playerId].immune = true;
       break;
 
     case 'destroy_shields': {
