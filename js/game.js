@@ -71,6 +71,7 @@ export async function startGame(roomCode, roomState) {
     extraPlaysThisTurn: 0,
     pendingReclaim: null,
     pendingShieldPick: null,
+    pendingPickpocket: null,
   };
 
   const decks = {};
@@ -91,6 +92,8 @@ export async function startGame(roomCode, roomState) {
 
   updates.decks = decks;
   updates.discardPiles = discardPiles;
+
+  updates.eliminationOrder = [];
 
   const entry = logEntry('Game started!');
   updates.lastAction = entry;
@@ -119,6 +122,7 @@ export async function startTurn(roomCode, playerId, roomState) {
     extraPlaysThisTurn:  0,
     pendingReclaim:      null,
     pendingShieldPick:   null,
+    pendingPickpocket:   null,
     lastAction:          entry,
     actionLog,
   };
@@ -138,6 +142,7 @@ export async function endTurn(roomCode, roomState, playerId) {
     extraPlaysThisTurn:  0,
     pendingReclaim:      null,
     pendingShieldPick:   null,
+    pendingPickpocket:   null,
   };
 
   const nextId = getNextTurn(roomState.turnOrder, playerId, roomState.players);
@@ -281,6 +286,60 @@ export async function resolveShieldPick(roomCode, roomState, playerId, shieldIns
   await updateRoom(roomCode, updates);
 }
 
+// --- Pickpocket resolution ---
+
+export async function resolvePickpocket(roomCode, roomState, pickerId, attackTargetId = null) {
+  const pick = roomState.pendingPickpocket;
+  if (!pick || pick.pickerId !== pickerId) return;
+
+  const { stolenCardId, ownerId } = pick;
+  const stolenCard = CARDS[stolenCardId];
+  const updates = { pendingPickpocket: null };
+
+  if (stolenCard?.symbols) {
+    const nonMighty = stolenCard.symbols.filter(
+      s => s.type !== SYM.MIGHTY && s.type !== SYM.RECLAIM && s.type !== SYM.PLAY_AGAIN
+    );
+    if (nonMighty.length > 0) {
+      const effectUpdates = resolveSymbols(
+        nonMighty,
+        { playerId: pickerId, targetId: attackTargetId, cardId: stolenCardId },
+        roomState
+      );
+      Object.assign(updates, effectUpdates);
+    }
+  }
+
+  // Return card to owner's discard (after any effect updates to their discard)
+  const baseOwnerDiscard = updates[`discardPiles.${ownerId}`] ?? [...(roomState.discardPiles[ownerId] || [])];
+  updates[`discardPiles.${ownerId}`] = [...baseOwnerDiscard, stolenCardId];
+
+  const entry = logEntry(
+    `${roomState.players[pickerId].name} used ${stolenCard?.name ?? stolenCardId} (from ${roomState.players[ownerId]?.name ?? ownerId}'s deck)`,
+    { playerId: pickerId, cardId: stolenCardId }
+  );
+  updates.lastAction = entry;
+  updates.actionLog  = pushLog(roomState.actionLog, entry);
+
+  // Win check
+  const finalPlayers = {};
+  for (const [pid, p] of Object.entries(roomState.players)) {
+    finalPlayers[pid] = {
+      ...p,
+      hp:          updates[`players.${pid}.hp`]          ?? p.hp,
+      shieldCards: updates[`players.${pid}.shieldCards`] ?? p.shieldCards,
+      eliminated:  updates[`players.${pid}.eliminated`]  ?? p.eliminated,
+    };
+  }
+  const winner = checkWinCondition(finalPlayers);
+  if (winner) {
+    updates.winner = winner === 'draw' ? pickerId : winner;
+    updates.status = 'finished';
+  }
+
+  await updateRoom(roomCode, updates);
+}
+
 // --- Symbol resolution ---
 
 function applySymbols(symbols, context, players, decks, discardPiles) {
@@ -414,12 +473,21 @@ export function resolveSymbols(symbols, context, roomState) {
       updates[`discardPiles.${pid}`] = discardPiles[pid];
   }
 
+  const newlyEliminated = Object.keys(roomState.players).filter(
+    pid => !roomState.players[pid].eliminated && players[pid]?.eliminated
+  );
+  if (newlyEliminated.length > 0) {
+    updates.eliminationOrder = [...(roomState.eliminationOrder || []), ...newlyEliminated];
+  }
+
   if (extraPlays > 0)
     updates.extraPlaysThisTurn = (roomState.extraPlaysThisTurn || 0) + extraPlays;
   if (pendingReclaim)
     updates.pendingReclaim = playerId;
   if (ctx.shieldPickRequest)
     updates.pendingShieldPick = { ...ctx.shieldPickRequest, pickerId: playerId };
+  if (ctx.pickpocketRequest)
+    updates.pendingPickpocket = { ...ctx.pickpocketRequest, pickerId: playerId };
 
   return updates;
 }
@@ -500,15 +568,8 @@ function resolveMighty(sym, context, players, decks, discardPiles) {
       }
       const stolenId = tDeck[0];
       decks[targetId] = tDeck.slice(1);
-
-      const stolenCard = CARDS[stolenId];
-      if (stolenCard?.symbols) {
-        const nonMighty = stolenCard.symbols.filter(
-          s => s.type !== SYM.MIGHTY && s.type !== SYM.RECLAIM
-        );
-        applySymbols(nonMighty, { ...context, cardId: stolenId }, players, decks, discardPiles);
-      }
-      discardPiles[targetId] = [...(discardPiles[targetId] || []), stolenId];
+      // Two-phase: store stolen card, let UI show it and collect attack target if needed
+      context.pickpocketRequest = { stolenCardId: stolenId, ownerId: targetId };
       break;
     }
 
@@ -661,6 +722,42 @@ export function applyDamage(player, amount, discardPile = []) {
 
   hp = Math.max(0, hp - dmg);
   return { newHp: hp, newShieldCards: shieldCards, newDiscard };
+}
+
+// --- Room reset (Play Again) ---
+
+export async function resetRoom(roomCode, roomState) {
+  const updates = {
+    status:              'lobby',
+    decks:               {},
+    discardPiles:        {},
+    currentTurn:         null,
+    turnOrder:           [],
+    turnPhase:           null,
+    winner:              null,
+    lastAction:          null,
+    actionLog:           [],
+    cardsPlayedThisTurn: 0,
+    extraPlaysThisTurn:  0,
+    pendingReclaim:      null,
+    pendingShieldPick:   null,
+    pendingPickpocket:   null,
+    eliminationOrder:    [],
+  };
+
+  for (const pid of Object.keys(roomState.players)) {
+    updates[`players.${pid}.heroId`]          = null;
+    updates[`players.${pid}.ready`]           = false;
+    updates[`players.${pid}.hp`]              = 10;
+    updates[`players.${pid}.hand`]            = [];
+    updates[`players.${pid}.shieldCards`]     = [];
+    updates[`players.${pid}.eliminated`]      = false;
+    updates[`players.${pid}.immune`]          = false;
+    updates[`players.${pid}.jaheiraForm`]     = null;
+    updates[`players.${pid}.frienemiesBonus`] = 0;
+  }
+
+  await updateRoom(roomCode, updates);
 }
 
 // --- Jaheira form ---
