@@ -1,13 +1,17 @@
 import { getOrCreatePlayerId, handleCreateRoom, handleJoinRoom, selectHero, setReady, startGameIfReady, isHost, addBot } from './room.js';
 import { subscribeToRoom } from './firebase.js';
 import { HEROES, CARDS, SYM, cardNeedsTarget } from './cards.js';
-import { startGame, startTurn, endTurn, playCard, reclaimCard, resolveShieldPick, resolvePickpocket, resetRoom } from './game.js';
+import { startRollingPhase, startGame, startTurn, endTurn, playCard, reclaimCard, resolveShieldPick, resolvePickpocket, resetRoom } from './game.js';
 import { isBot, driveBotTurn } from './bot.js';
 
 // --- Module state ---
 let playerId       = getOrCreatePlayerId();
 let roomCode       = null;
 let roomState      = null;
+
+// Rolling-screen state
+let rollingAnimated = false;
+let rollingTimer    = null;
 
 // Game-screen local state
 let lastTurnPlayer          = null;
@@ -148,7 +152,7 @@ function initLobby() {
     if (!roomState || !roomCode) return;
     try {
       await startGameIfReady(roomCode, roomState);
-      await startGame(roomCode, roomState);
+      await startRollingPhase(roomCode, roomState);
     } catch (e) {
       document.getElementById('lobby-status').textContent = e.message;
       setTimeout(() => { document.getElementById('lobby-status').textContent = ''; }, 3000);
@@ -832,6 +836,79 @@ function renderWin(state) {
   }).join('');
 }
 
+// --- Rolling screen ---
+
+function renderRolling(state) {
+  showScreen('screen-rolling');
+  if (rollingAnimated) return;
+  rollingAnimated = true;
+
+  const players  = state.players;
+  const rolls    = state.rolls || {};
+  const turnOrder = state.turnOrder || [];
+  const pids     = Object.keys(players);
+
+  const SETTLE_START   = 1200;
+  const SETTLE_STAGGER = 220;
+
+  document.getElementById('rolling-list').innerHTML = pids.map(pid => {
+    const p    = players[pid];
+    const hero = p.heroId ? HEROES[p.heroId] : null;
+    return `<div class="roll-row">
+      <span class="roll-name">${escHtml(p.name)}</span>
+      ${hero ? `<span class="roll-hero" style="color:${hero.color}">${escHtml(hero.name)}</span>` : ''}
+      <span class="roll-die" id="roll-die-${pid}">?</span>
+    </div>`;
+  }).join('');
+
+  pids.forEach((pid, i) => {
+    const dieEl = document.getElementById(`roll-die-${pid}`);
+    if (!dieEl) return;
+    const finalRoll = rolls[pid] ?? 1;
+    const settleAt  = SETTLE_START + i * SETTLE_STAGGER;
+
+    const interval = setInterval(() => {
+      dieEl.textContent = Math.floor(Math.random() * 20) + 1;
+    }, 80);
+
+    setTimeout(() => {
+      clearInterval(interval);
+      dieEl.textContent = finalRoll;
+      if      (finalRoll === 20) dieEl.classList.add('roll-nat20');
+      else if (finalRoll === 1)  dieEl.classList.add('roll-nat1');
+      else                        dieEl.classList.add('roll-settled');
+    }, settleAt);
+  });
+
+  const lastSettleAt = SETTLE_START + (pids.length - 1) * SETTLE_STAGGER;
+
+  setTimeout(() => {
+    const orderEl = document.getElementById('rolling-order');
+    const ordinals = ['1st', '2nd', '3rd', '4th', '5th', '6th'];
+    orderEl.innerHTML = '<h3>Turn Order</h3>' + turnOrder.map((pid, i) => {
+      const p    = players[pid];
+      const hero = p.heroId ? HEROES[p.heroId] : null;
+      return `<div class="order-row">
+        <span class="order-pos">${ordinals[i] ?? `${i + 1}th`}</span>
+        <span class="order-name">${escHtml(p.name)}</span>
+        ${hero ? `<span class="order-hero" style="color:${hero.color}">${escHtml(hero.name)}</span>` : ''}
+        <span class="order-roll">${rolls[pid] ?? '?'}</span>
+      </div>`;
+    }).join('');
+    orderEl.classList.remove('hidden');
+  }, lastSettleAt + 400);
+
+  if (isHost(state, playerId)) {
+    const startAt = lastSettleAt + 2200;
+    rollingTimer = setTimeout(async () => {
+      rollingTimer = null;
+      if (roomState?.status === 'rolling') {
+        await startGame(roomCode, roomState);
+      }
+    }, startAt);
+  }
+}
+
 // --- Subscription & routing ---
 
 function subscribeAndRoute(code) {
@@ -845,8 +922,14 @@ function subscribeAndRoute(code) {
       return;
     }
 
+    if (state.status !== 'rolling') {
+      rollingAnimated = false;
+      if (rollingTimer) { clearTimeout(rollingTimer); rollingTimer = null; }
+    }
+
     if (state.status === 'lobby')    renderLobby(state);
-    if (state.status === 'playing')  { renderGame(state); driveBotTurn(roomCode, state); }
+    if (state.status === 'rolling')  renderRolling(state);
+    if (state.status === 'playing')  { renderGame(state); driveBotTurn(roomCode, state, () => roomState); }
     if (state.status === 'finished') renderWin(state);
   });
 }

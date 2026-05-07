@@ -57,9 +57,24 @@ function getAttackTargets(targetType, playerId, players) {
 
 // --- Turn management ---
 
+export async function startRollingPhase(roomCode, roomState) {
+  const playerIds = Object.keys(roomState.players);
+  const rolls = {};
+  for (const pid of playerIds) {
+    rolls[pid] = Math.floor(Math.random() * 20) + 1;
+  }
+  const turnOrder = [...playerIds].sort((a, b) => {
+    const diff = rolls[b] - rolls[a];
+    return diff !== 0 ? diff : (Math.random() < 0.5 ? -1 : 1);
+  });
+  await updateRoom(roomCode, { status: 'rolling', rolls, turnOrder });
+}
+
 export async function startGame(roomCode, roomState) {
   const playerIds = Object.keys(roomState.players);
-  const turnOrder = shuffle(playerIds);
+  const turnOrder = (roomState.turnOrder?.length ?? 0) > 0
+    ? roomState.turnOrder
+    : shuffle(playerIds);
 
   const updates = {
     status: 'playing',
@@ -743,6 +758,7 @@ export async function resetRoom(roomCode, roomState) {
     pendingShieldPick:   null,
     pendingPickpocket:   null,
     eliminationOrder:    [],
+    rolls:               {},
   };
 
   for (const pid of Object.keys(roomState.players)) {

@@ -408,7 +408,7 @@ export const CARDS = {
   minsc_swapportunity: {
     id: 'minsc_swapportunity', heroId: 'minsc', name: 'Swapportunity', count: 2,
     symbols: [mty('swapportunity_all')],
-    description: 'Each player gives their HP to the player on their right (in turn order)',
+    description: 'Each player receives the HP of the previous player in turn order (circular)',
   },
   minsc_squeaky_wheel: {
     id: 'minsc_squeaky_wheel', heroId: 'minsc', name: 'Squeaky Wheel Gets the Kick', count: 3,

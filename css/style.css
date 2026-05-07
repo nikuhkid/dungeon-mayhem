@@ -1205,3 +1205,123 @@ button.secondary {
 
 .take-damage  { animation: take-damage-anim 0.35s steps(4) forwards; }
 .receive-heal { animation: heal-flash-anim 0.5s steps(3) forwards; }
+
+/* =========================== ROLLING SCREEN === */
+
+#screen-rolling {
+  max-width: 560px;
+  text-align: center;
+}
+
+#screen-rolling h2 {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 0.85rem;
+  color: var(--gold);
+  margin-bottom: 2rem;
+  line-height: 1.8;
+  text-shadow: 3px 3px 0 var(--gold-dark);
+}
+
+#rolling-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-bottom: 2rem;
+}
+
+.roll-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  background: var(--surface);
+  border: 2px solid var(--border);
+  padding: 0.75rem 1rem;
+  box-shadow: var(--px-shadow);
+}
+
+.roll-name {
+  flex: 1;
+  font-weight: 700;
+  font-size: 0.8rem;
+  color: var(--text-bright);
+}
+
+.roll-hero {
+  font-size: 0.7rem;
+  min-width: 90px;
+}
+
+.roll-die {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 1.4rem;
+  min-width: 2.8rem;
+  text-align: right;
+  color: var(--muted);
+  transition: color 0.2s;
+}
+
+.roll-settled { color: var(--text-bright); }
+
+.roll-nat20 {
+  color: var(--gold);
+  text-shadow: 0 0 8px var(--gold), 3px 3px 0 var(--gold-dark);
+  animation: nat20-pulse 0.6s steps(3) 2;
+}
+
+.roll-nat1 {
+  color: var(--red);
+  text-shadow: 3px 3px 0 var(--red-dark);
+}
+
+@keyframes nat20-pulse {
+  0%   { transform: scale(1); }
+  50%  { transform: scale(1.15); }
+  100% { transform: scale(1); }
+}
+
+#rolling-order {
+  background: var(--surface);
+  border: 2px solid var(--border);
+  box-shadow: var(--px-shadow);
+  overflow: hidden;
+  animation: pp-fadein 0.3s ease;
+}
+
+#rolling-order h3 {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 0.65rem;
+  color: var(--gold);
+  padding: 0.75rem 1rem;
+  background: var(--surface2);
+  border-bottom: 1px solid var(--border);
+}
+
+.order-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.55rem 1rem;
+  border-bottom: 1px solid var(--border2);
+  font-size: 0.78rem;
+}
+
+.order-row:last-child { border-bottom: none; }
+
+.order-pos {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 0.55rem;
+  color: var(--gold);
+  min-width: 2.5rem;
+}
+
+.order-name { flex: 1; font-weight: 700; }
+
+.order-hero { font-size: 0.7rem; min-width: 90px; }
+
+.order-roll {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 0.75rem;
+  color: var(--text-bright);
+  min-width: 2rem;
+  text-align: right;
+}

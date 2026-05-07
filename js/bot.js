@@ -7,19 +7,25 @@ export function isBot(playerId) {
 
 let botActing = false;
 
-export async function driveBotTurn(roomCode, state) {
+export async function driveBotTurn(roomCode, state, getState) {
   if (botActing) return;
-  const currentId = state.currentTurn;
-  if (!isBot(currentId)) return;
-
-  const bot = state.players[currentId];
-  if (!bot || bot.eliminated) return;
-
+  if (!isBot(state.currentTurn)) return;
   botActing = true;
   try {
-    await _act(roomCode, state, currentId);
+    let s = state;
+    while (s && s.status === 'playing') {
+      const botId = s.currentTurn;
+      if (!isBot(botId)) break;
+      const bot = s.players[botId];
+      if (!bot || bot.eliminated) break;
+      await _act(roomCode, s, botId);
+      // Brief pause for Firestore subscription to update roomState
+      await new Promise(r => setTimeout(r, 120));
+      s = getState ? getState() : null;
+      if (!s) break;
+    }
   } catch (_) {
-    // swallow — next state update will retry
+    // swallow — state is live; next subscription will re-trigger if needed
   } finally {
     botActing = false;
   }
