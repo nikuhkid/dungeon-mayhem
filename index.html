@@ -71,6 +71,21 @@
   <!-- ROLLING SCREEN -->
   <div id="screen-rolling" class="screen hidden">
     <h2>Rolling for Turn Order!</h2>
+    <div id="d20-anim">
+      <svg id="d20-svg" viewBox="0 0 100 92" width="140" height="129" xmlns="http://www.w3.org/2000/svg">
+        <!-- outer face -->
+        <polygon points="50,3 97,89 3,89" fill="#1e1a35" stroke="#ffd700" stroke-width="2.5" stroke-linejoin="bevel"/>
+        <!-- medians -->
+        <line x1="50"  y1="3"  x2="50"   y2="89" stroke="#ffd700" stroke-width="1.2" opacity="0.4"/>
+        <line x1="97"  y1="89" x2="26.5" y2="46" stroke="#ffd700" stroke-width="1.2" opacity="0.4"/>
+        <line x1="3"   y1="89" x2="73.5" y2="46" stroke="#ffd700" stroke-width="1.2" opacity="0.4"/>
+        <!-- medial triangle -->
+        <polygon points="73.5,46 50,89 26.5,46" fill="none" stroke="#ffd700" stroke-width="1" opacity="0.3"/>
+        <!-- label -->
+        <text x="50" y="57" text-anchor="middle" dominant-baseline="middle"
+              fill="#ffd700" font-family="'Press Start 2P', monospace" font-size="18">20</text>
+      </svg>
+    </div>
     <div id="rolling-list"></div>
     <div id="rolling-order" class="hidden"></div>
   </div>

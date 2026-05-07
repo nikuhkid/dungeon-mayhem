@@ -1274,6 +1274,42 @@ button.secondary {
   text-align: center;
 }
 
+/* D20 die animation */
+
+#d20-anim {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 1.75rem;
+}
+
+#d20-svg {
+  display: block;
+  transform-origin: center;
+  filter: drop-shadow(3px 3px 0 #7a5c00) drop-shadow(0 0 10px rgba(255, 215, 0, 0.25));
+}
+
+@keyframes d20-spin {
+  0%   { transform: rotate(0deg)   scale(1); }
+  50%  { transform: rotate(180deg) scale(0.86); }
+  100% { transform: rotate(360deg) scale(1); }
+}
+
+@keyframes d20-bounce {
+  0%   { transform: rotate(-28deg) scale(1.18); }
+  35%  { transform: rotate(10deg)  scale(1.06); }
+  60%  { transform: rotate(-4deg)  scale(0.97); }
+  80%  { transform: rotate(2deg)   scale(1.01); }
+  100% { transform: rotate(0deg)   scale(1); }
+}
+
+#d20-anim.rolling #d20-svg {
+  animation: d20-spin 0.18s linear infinite;
+}
+
+#d20-anim.landing #d20-svg {
+  animation: d20-bounce 0.55s cubic-bezier(0.2, 0.8, 0.3, 1) forwards;
+}
+
 #screen-rolling h2 {
   font-family: 'Press Start 2P', monospace;
   font-size: 0.85rem;

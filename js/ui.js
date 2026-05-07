@@ -881,6 +881,10 @@ function renderRolling(state) {
   if (rollingAnimated) return;
   rollingAnimated = true;
 
+  const d20El = document.getElementById('d20-anim');
+  d20El.classList.remove('landing');
+  d20El.classList.add('rolling');
+
   const players  = state.players;
   const rolls    = state.rolls || {};
   const turnOrder = state.turnOrder || [];
@@ -919,6 +923,12 @@ function renderRolling(state) {
   });
 
   const lastSettleAt = SETTLE_START + (pids.length - 1) * SETTLE_STAGGER;
+
+  // Die bounces to a stop when last number settles
+  setTimeout(() => {
+    d20El.classList.remove('rolling');
+    d20El.classList.add('landing');
+  }, lastSettleAt);
 
   setTimeout(() => {
     const orderEl = document.getElementById('rolling-order');
