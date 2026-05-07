@@ -1306,8 +1306,8 @@ body.card-preview .hand-card:hover {
 
 .table-card {
   position: relative;
-  width: 272px;
-  height: 408px;
+  width: 204px;
+  height: 306px;
   box-shadow: var(--px-shadow);
   border: 2px solid var(--border);
   flex-shrink: 0;
