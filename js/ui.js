@@ -784,9 +784,41 @@ function renderHand(state) {
 
 function renderActionLog(state) {
   const entries = state.actionLog || [];
-  document.getElementById('log-entries').innerHTML = entries.map(e =>
-    `<div class="log-entry">${escHtml(e.description)}</div>`
-  ).join('') || '<div class="log-entry muted">No actions yet</div>';
+  document.getElementById('log-entries').innerHTML = entries.map(e => {
+    let html = escHtml(e.description);
+    if (e.cardId) {
+      const card = CARDS[e.cardId];
+      const name = card?.name;
+      if (name) {
+        const src = cardImg(e.cardId);
+        html = html.replace(
+          escHtml(name),
+          `<span class="log-card-link" data-card-src="${src}">${escHtml(name)}</span>`
+        );
+      }
+    }
+    return `<div class="log-entry">${html}</div>`;
+  }).join('') || '<div class="log-entry muted">No actions yet</div>';
+}
+
+function initLogCardPreview() {
+  const preview = document.getElementById('log-card-preview');
+  const logEl   = document.getElementById('log-entries');
+  logEl.addEventListener('mouseover', e => {
+    const link = e.target.closest('.log-card-link');
+    if (!link) return;
+    const src = link.dataset.cardSrc;
+    if (!src) return;
+    preview.style.backgroundImage = `url('${src}')`;
+    const rect = link.getBoundingClientRect();
+    preview.style.left = `${rect.left}px`;
+    preview.style.top  = `${rect.top - 175}px`;
+    preview.classList.remove('hidden');
+  });
+  logEl.addEventListener('mouseout', e => {
+    if (!e.target.closest('.log-card-link')) return;
+    preview.classList.add('hidden');
+  });
 }
 
 function updateGameButtons(state) {
@@ -1040,6 +1072,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initHome();
   initLobby();
   initGame();
+  initLogCardPreview();
   applyCardPreview();
 
   const savedCode = sessionStorage.getItem('roomCode');

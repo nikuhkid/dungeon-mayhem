@@ -334,10 +334,11 @@ button.secondary {
 
 #screen-game {
   max-width: 1600px;
-  min-height: 100vh;
+  height: 100vh;
+  overflow: visible;
   display: grid;
   grid-template-columns: 160px 1fr 220px;
-  grid-template-rows: auto auto auto auto;
+  grid-template-rows: auto 1fr auto auto;
   grid-template-areas:
     "header  header  header"
     "piles   opps    log"
@@ -624,6 +625,25 @@ button.secondary {
 
 .log-entry.muted { color: var(--muted); font-style: italic; }
 .log-entry:first-child { color: var(--gold); }
+
+.log-card-link {
+  color: var(--gold);
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  cursor: help;
+}
+
+#log-card-preview {
+  position: fixed;
+  width: 110px;
+  height: 165px;
+  background-size: cover;
+  background-repeat: no-repeat;
+  border: 2px solid var(--border);
+  box-shadow: var(--px-shadow-lg);
+  z-index: 500;
+  pointer-events: none;
+}
 
 /* Self panel */
 #self-panel {
