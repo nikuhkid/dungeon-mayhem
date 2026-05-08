@@ -467,6 +467,75 @@ export const CARDS = {
   },
 };
 
+// --- Remix helpers ---
+
+// Jaheira's form cards + commune must travel as a unit
+export const JAHEIRA_TRIO = ['jaheira_wolf_form', 'jaheira_bear_form', 'jaheira_commune'];
+
+export function buildRemixDecks(players) {
+  const playerIds = Object.keys(players);
+  const MAX_SLOTS = 3;
+
+  const allMightyIds = Object.values(CARDS)
+    .filter(c => c.symbols.some(s => s.type === SYM.MIGHTY))
+    .map(c => c.id);
+
+  const jaheiraTrio  = JAHEIRA_TRIO;
+  const banishSmite  = 'lia_banishing_smite';
+  const singles      = allMightyIds.filter(id => !jaheiraTrio.includes(id) && id !== banishSmite);
+
+  // Banishing Smite takes 2 slots (leaves room for only 1 other mighty — enforces the rule)
+  const dealItems = shuffle([
+    { ids: jaheiraTrio, slots: 3 },
+    { ids: [banishSmite], slots: 2 },
+    ...singles.map(id => ({ ids: [id], slots: 1 })),
+  ]);
+
+  const assignments = {};
+  const slotsUsed  = {};
+  for (const pid of playerIds) { assignments[pid] = []; slotsUsed[pid] = 0; }
+
+  const pids   = shuffle([...playerIds]);
+  let cursor   = 0;
+
+  for (const item of dealItems) {
+    for (let i = 0; i < pids.length; i++) {
+      const pid = pids[(cursor + i) % pids.length];
+      if (slotsUsed[pid] + item.slots <= MAX_SLOTS) {
+        assignments[pid].push(...item.ids);
+        slotsUsed[pid] += item.slots;
+        cursor = (cursor + i + 1) % pids.length;
+        break;
+      }
+    }
+    // No player can fit this item — it's excluded this game
+  }
+
+  const result = {};
+  for (const pid of playerIds) {
+    const hero        = players[pid].heroId;
+    const assignedSet = new Set(assignments[pid]);
+    const deck        = [];
+
+    for (const card of Object.values(CARDS)) {
+      const isMighty = card.symbols.some(s => s.type === SYM.MIGHTY);
+      if (isMighty) {
+        if (assignedSet.has(card.id)) {
+          for (let i = 0; i < card.count; i++) deck.push(card.id);
+        }
+      } else {
+        if (card.heroId === hero) {
+          for (let i = 0; i < card.count; i++) deck.push(card.id);
+        }
+      }
+    }
+
+    result[pid] = shuffle(deck);
+  }
+
+  return result;
+}
+
 // --- Helpers ---
 
 export function shuffle(arr) {

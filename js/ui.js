@@ -1,4 +1,4 @@
-import { getOrCreatePlayerId, handleCreateRoom, handleJoinRoom, selectHero, setReady, startGameIfReady, isHost, addBot } from './room.js';
+import { getOrCreatePlayerId, handleCreateRoom, handleJoinRoom, selectHero, setReady, startGameIfReady, isHost, addBot, setGameMode } from './room.js';
 import { subscribeToRoom } from './firebase.js';
 import { HEROES, CARDS, SYM, cardNeedsTarget } from './cards.js';
 import { startRollingPhase, startGame, startTurn, endTurn, playCard, reclaimCard, resolveShieldPick, resolvePickpocket, resetRoom } from './game.js';
@@ -215,6 +215,12 @@ function initLobby() {
       setTimeout(() => { document.getElementById('lobby-status').textContent = ''; }, 3000);
     }
   });
+
+  document.getElementById('btn-game-mode').addEventListener('click', async () => {
+    if (!roomCode || !roomState || !isHost(roomState, playerId)) return;
+    const current = roomState.gameMode || 'classic';
+    await setGameMode(roomCode, current === 'classic' ? 'remix' : 'classic');
+  });
 }
 
 function renderLobby(state) {
@@ -270,8 +276,11 @@ function renderLobby(state) {
   btnReady.disabled    = !me?.heroId || !!me?.ready;
   btnReady.textContent = me?.ready ? 'Locked In' : 'Lock In';
 
-  const btnStart  = document.getElementById('btn-start-game');
-  const btnAddBot = document.getElementById('btn-add-bot');
+  const btnStart   = document.getElementById('btn-start-game');
+  const btnAddBot  = document.getElementById('btn-add-bot');
+  const btnMode    = document.getElementById('btn-game-mode');
+  const mode       = state.gameMode || 'classic';
+
   if (isHost(state, playerId)) {
     btnStart.classList.remove('hidden');
     const allReady = playerEntries.every(([, p]) => p.heroId && p.ready);
@@ -281,15 +290,21 @@ function renderLobby(state) {
     const heroesLeft   = Object.keys(HEROES).filter(h => !takenHeroes.has(h)).length;
     const canAddBot    = playerEntries.length < 6 && heroesLeft > 0;
     btnAddBot.classList.toggle('hidden', !canAddBot);
+
+    btnMode.classList.remove('hidden');
+    btnMode.textContent = mode === 'remix' ? 'Remix' : 'Classic';
+    btnMode.classList.toggle('mode-remix', mode === 'remix');
   } else {
     btnStart.classList.add('hidden');
     btnAddBot.classList.add('hidden');
+    btnMode.classList.add('hidden');
   }
 
-  const total = playerEntries.length;
-  const ready = playerEntries.filter(([, p]) => p.ready).length;
+  const total     = playerEntries.length;
+  const ready     = playerEntries.filter(([, p]) => p.ready).length;
+  const modeLabel = mode === 'remix' ? ' · REMIX' : ' · CLASSIC';
   document.getElementById('lobby-status').textContent =
-    total < 2 ? 'Waiting for more players...' : `${ready} / ${total} locked in`;
+    (total < 2 ? 'Waiting for more players...' : `${ready} / ${total} locked in`) + modeLabel;
 }
 
 // --- Game screen ---

@@ -1,4 +1,4 @@
-import { CARDS, SYM, shuffle, buildDeck } from './cards.js';
+import { CARDS, SYM, shuffle, buildDeck, buildRemixDecks } from './cards.js';
 import { updateRoom } from './firebase.js';
 
 // --- Internal helpers ---
@@ -98,9 +98,14 @@ export async function startGame(roomCode, roomState) {
   const decks = {};
   const discardPiles = {};
 
+  const remixDecks = roomState.gameMode === 'remix'
+    ? buildRemixDecks(roomState.players)
+    : null;
+
   for (const pid of playerIds) {
-    const heroId = roomState.players[pid].heroId;
-    const { deck, drawn } = drawCards(buildDeck(heroId), [], 3);
+    const heroId   = roomState.players[pid].heroId;
+    const fullDeck = remixDecks ? remixDecks[pid] : buildDeck(heroId);
+    const { deck, drawn } = drawCards(fullDeck, [], 3);
     decks[pid] = deck;
     discardPiles[pid] = [];
     updates[`players.${pid}.hand`]            = drawn;

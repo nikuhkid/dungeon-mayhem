@@ -325,6 +325,12 @@ button.secondary {
 #screen-lobby #btn-start-game { background: #1a4a2a; }
 #screen-lobby #btn-start-game:hover:not(:disabled) { background: #1d5a33; }
 
+#btn-game-mode.mode-remix {
+  border-color: var(--gold);
+  color: var(--gold);
+  background: #1a1400;
+}
+
 #lobby-status {
   font-family: 'Press Start 2P', monospace;
   font-size: 0.55rem;

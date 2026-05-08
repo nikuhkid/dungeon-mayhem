@@ -71,6 +71,10 @@ export async function setReady(roomCode, playerId) {
   await updatePlayer(roomCode, playerId, { ready: true });
 }
 
+export async function setGameMode(roomCode, mode) {
+  await updateRoom(roomCode, { gameMode: mode });
+}
+
 export async function startGameIfReady(roomCode, roomState) {
   const players = Object.values(roomState.players);
   if (players.length < 2) throw new Error('Need at least 2 players to start');
