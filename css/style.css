@@ -356,7 +356,7 @@ button.secondary {
   gap: 0.4rem;
 }
 
-#pile-area     { grid-area: piles; align-self: start; }
+#pile-area     { grid-area: piles; align-self: end; }
 #opponents-area { grid-area: opps; }
 #action-log    { grid-area: log;   align-self: stretch; }
 #table-area    { grid-area: table; }
