@@ -570,7 +570,21 @@ function renderTableArea(state) {
     }
   }
 
-  if (allPlayed.length === 0) {
+  // Also show stolen card if pickpocket is pending
+  const pp = state.pendingPickpocket;
+  let stolenCardEl = '';
+  if (pp?.stolenCardId) {
+    const stolenCard = CARDS[pp.stolenCardId];
+    const stolenSrc  = cardImg(pp.stolenCardId);
+    const fromName   = state.players[pp.targetId]?.name ?? '?';
+    stolenCardEl = `<div class="table-card table-card-stolen">
+      <img src="${stolenSrc}" alt="${escHtml(stolenCard?.name ?? pp.stolenCardId)}" draggable="false">
+      <div class="card-tooltip">${escHtml(stolenCard?.name ?? pp.stolenCardId)}</div>
+      <div class="table-card-owner">stolen from ${escHtml(fromName)}</div>
+    </div>`;
+  }
+
+  if (allPlayed.length === 0 && !stolenCardEl) {
     el.classList.add('hidden');
     el.innerHTML = '';
     return;
@@ -589,6 +603,7 @@ function renderTableArea(state) {
           <div class="table-card-owner">${escHtml(pname)}</div>
         </div>`;
       }).join('')}
+      ${stolenCardEl}
     </div>`;
 }
 
