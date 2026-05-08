@@ -148,7 +148,7 @@ button.secondary {
 /* =========================== LOBBY === */
 
 #screen-lobby {
-  max-width: 860px;
+  max-width: 640px;
 }
 
 #screen-lobby h2 {
@@ -216,7 +216,7 @@ button.secondary {
 
 #hero-list {
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 0.75rem;
 }
 
