@@ -474,12 +474,12 @@ button.secondary {
 }
 
 .hero-flip-sm:hover {
-  transform: scale(2.04);
+  transform: scale(4.0);
   z-index: 200;
 }
 
 .hero-flip-md:hover {
-  transform: scale(1.57);
+  transform: scale(3.1);
   z-index: 200;
 }
 
