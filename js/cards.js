@@ -486,7 +486,7 @@ export function buildRemixDecks(players) {
 
   // Banishing Smite takes 2 slots (leaves room for only 1 other mighty — enforces the rule)
   const dealItems = shuffle([
-    { ids: jaheiraTrio, slots: 3 },
+    { ids: jaheiraTrio, slots: 2 },
     { ids: [banishSmite], slots: 2 },
     ...singles.map(id => ({ ids: [id], slots: 1 })),
   ]);
