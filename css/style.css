@@ -201,7 +201,7 @@ button.secondary {
 .badge-waiting { background: #1a1a2a; color: var(--muted); }
 
 /* Hero selection grid */
-#hero-select { margin-bottom: 1.5rem; }
+#hero-select { margin-bottom: 0.75rem; }
 
 #hero-select h3 {
   font-family: 'Press Start 2P', monospace;
@@ -214,8 +214,8 @@ button.secondary {
 
 #hero-list {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 0.75rem;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 0.5rem;
 }
 
 .muted-msg { color: var(--muted); font-style: italic; padding: 0.5rem 0; font-size: 0.8rem; }
@@ -238,7 +238,7 @@ button.secondary {
 
 .hero-card-back {
   width: 100%;
-  aspect-ratio: 2 / 3;
+  height: 110px;
   object-fit: fill;
   border: 1px solid var(--border2);
   display: block;
