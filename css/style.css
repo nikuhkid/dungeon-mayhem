@@ -615,12 +615,12 @@ button.secondary {
   flex-direction: column;
   overflow: hidden;
   box-shadow: var(--px-shadow);
-  flex: 1;
+  flex: 2;
 }
 
 /* Info card */
 #info-card {
-  flex: 1;
+  flex: 3;
   overflow: hidden;
   display: flex;
   align-items: flex-start;
