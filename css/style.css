@@ -471,8 +471,13 @@ button.secondary {
   z-index: 1;
 }
 
-.hero-flip:hover {
-  transform: scale(2.4);
+.hero-flip-sm:hover {
+  transform: scale(2.04);
+  z-index: 200;
+}
+
+.hero-flip-md:hover {
+  transform: scale(1.57);
   z-index: 200;
 }
 
@@ -1350,6 +1355,8 @@ button.secondary {
 body.card-preview .hand-card {
   transition: transform 0.14s ease, box-shadow 0.14s, border-color 0.08s;
 }
+
+body.card-preview .hand-card:hover .card-tooltip { opacity: 0; }
 
 body.card-preview .hand-card:hover {
   transform: scale(2.4) translateY(-28%);
