@@ -147,13 +147,17 @@ button.secondary {
 
 /* =========================== LOBBY === */
 
-#screen-lobby { max-width: 860px; }
+#screen-lobby {
+  max-width: 860px;
+  padding-top: 1rem;
+  padding-bottom: 1rem;
+}
 
 #screen-lobby h2 {
   font-family: 'Press Start 2P', monospace;
   font-size: 0.85rem;
   color: var(--gold);
-  margin-bottom: 1.5rem;
+  margin-bottom: 0.75rem;
   text-shadow: 2px 2px 0 var(--gold-dark);
 }
 
@@ -165,8 +169,8 @@ button.secondary {
 #lobby-players {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
-  margin-bottom: 1.5rem;
+  gap: 0.4rem;
+  margin-bottom: 0.75rem;
 }
 
 .lobby-player {
