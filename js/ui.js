@@ -561,11 +561,18 @@ function renderTableArea(state) {
   const order = state.turnOrder || Object.keys(state.players);
   const allPlayed = [];
 
+  // Shield cards stay in playedThisTurn while active — hide them from table view
+  const activeShieldIds = new Set();
+  for (const p of Object.values(state.players)) {
+    for (const sc of (p.shieldCards || [])) activeShieldIds.add(sc.cardId);
+  }
+
   for (const pid of order) {
     const cards = state.playedThisTurn?.[pid] || [];
     if (cards.length === 0) continue;
     const p = state.players[pid];
     for (const cid of cards) {
+      if (activeShieldIds.has(cid)) continue;
       allPlayed.push({ cid, pid, pname: p?.name ?? pid });
     }
   }
@@ -664,7 +671,7 @@ function renderOpponents(state) {
           </div>
           <div class="opp-stats">
             ${hpHearts(p.hp)}
-            ${(p.shieldCards || []).map(sc => `<span class="stat-shield shield-card-badge" title="${escHtml(CARDS[sc.cardId]?.name ?? sc.cardId)}">shld:${sc.remaining}</span>`).join('')}
+            ${(p.shieldCards || []).map(sc => `<span class="stat-shield shield-card-badge" data-card-src="${cardImg(sc.cardId)}" title="${escHtml(CARDS[sc.cardId]?.name ?? sc.cardId)}">shld:${sc.remaining}</span>`).join('')}
             ${p.eliminated ? '<span class="elim-badge">Eliminated</span>' : ''}
           </div>
           <div class="opp-card-count">${(p.hand || []).length} card${(p.hand || []).length !== 1 ? 's' : ''} in hand</div>
@@ -704,7 +711,7 @@ function renderSelf(state) {
         </div>
         <div class="self-stats">
           ${hpHearts(me.hp)}
-          ${(me.shieldCards || []).map(sc => `<span class="stat-shield shield-card-badge" title="${escHtml(CARDS[sc.cardId]?.name ?? sc.cardId)}">shld:${sc.remaining}</span>`).join('')}
+          ${(me.shieldCards || []).map(sc => `<span class="stat-shield shield-card-badge" data-card-src="${cardImg(sc.cardId)}" title="${escHtml(CARDS[sc.cardId]?.name ?? sc.cardId)}">shld:${sc.remaining}</span>`).join('')}
         </div>
       </div>
     </div>`;
@@ -817,10 +824,11 @@ function renderActionLog(state) {
 }
 
 function initLogCardPreview() {
-  const preview = document.getElementById('log-card-preview');
-  const logEl   = document.getElementById('log-entries');
-  logEl.addEventListener('mouseover', e => {
-    const link = e.target.closest('.log-card-link');
+  const preview  = document.getElementById('log-card-preview');
+  const selector = '.log-card-link, .shield-card-badge[data-card-src]';
+
+  document.body.addEventListener('mouseover', e => {
+    const link = e.target.closest(selector);
     if (!link) return;
     const src = link.dataset.cardSrc;
     if (!src) return;
@@ -830,8 +838,9 @@ function initLogCardPreview() {
     preview.style.top  = `${rect.top - 175}px`;
     preview.classList.remove('hidden');
   });
-  logEl.addEventListener('mouseout', e => {
-    if (!e.target.closest('.log-card-link')) return;
+
+  document.body.addEventListener('mouseout', e => {
+    if (!e.target.closest(selector)) return;
     preview.classList.add('hidden');
   });
 }
@@ -962,7 +971,7 @@ function renderWin(state) {
       <span class="standing-hero-name">${escHtml(h?.name ?? '')}</span>
       ${hpHearts(p.hp, true)}
       <span class="stat-hp">HP:${p.hp}</span>
-      ${(p.shieldCards || []).map(sc => `<span class="stat-shield shield-card-badge" title="${escHtml(CARDS[sc.cardId]?.name ?? sc.cardId)}">shld:${sc.remaining}</span>`).join('')}
+      ${(p.shieldCards || []).map(sc => `<span class="stat-shield shield-card-badge" data-card-src="${cardImg(sc.cardId)}" title="${escHtml(CARDS[sc.cardId]?.name ?? sc.cardId)}">shld:${sc.remaining}</span>`).join('')}
     </div>`;
   }).join('');
 }
