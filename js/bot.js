@@ -96,7 +96,7 @@ async function _act(roomCode, state, botId) {
     const extra  = state.extraPlaysThisTurn  || 0;
 
     if (played > 0 && played > extra) {
-      await delay(500);
+      await delay(5000);
       await endTurn(roomCode, state, botId);
       return;
     }
