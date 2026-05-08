@@ -452,8 +452,8 @@ export const CARDS = {
   },
   minsc_nerys: {
     id: 'minsc_nerys', heroId: 'minsc', name: 'Pale Priestess Nerys', count: 2,
-    symbols: [sld(1), drw(1)],
-    description: 'Nerys aids you: gain 1 shield and draw 1 card',
+    symbols: [sld(1), heal(1)],
+    description: 'Nerys aids you: gain 1 shield and heal 1 HP',
   },
   minsc_time_to_punch: {
     id: 'minsc_time_to_punch', heroId: 'minsc', name: 'Time to Punch Evil!', count: 1,
