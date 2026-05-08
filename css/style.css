@@ -366,7 +366,7 @@ button.secondary {
 
 #pile-area     { grid-area: piles; align-self: end; }
 #opponents-area { grid-area: opps; }
-#action-log    { grid-area: log;   align-self: stretch; }
+#right-panel   { grid-area: log;   align-self: stretch; display: flex; flex-direction: column; gap: 0.5rem; }
 #table-area    { grid-area: table; }
 #self-panel    { grid-area: self; }
 
@@ -615,6 +615,24 @@ button.secondary {
   flex-direction: column;
   overflow: hidden;
   box-shadow: var(--px-shadow);
+  flex: 1;
+}
+
+/* Info card */
+#info-card {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+}
+
+#info-card img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: top center;
+  display: block;
 }
 
 #action-log h4 {
