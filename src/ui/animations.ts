@@ -62,84 +62,218 @@ function floatingText(anchor, text, className) {
   window.setTimeout(() => el.remove(), 950);
 }
 
-function showMightyOverlay(card) {
+function showMightyScene(card, variant = 'generic', html = '', duration = 1350) {
   const existing = document.querySelector('.fx-mighty-overlay');
   existing?.remove();
 
   const overlay = document.createElement('div');
-  overlay.className = 'fx-mighty-overlay';
+  overlay.className = `fx-mighty-overlay fx-mighty-${variant}`;
   overlay.innerHTML = `
-    <div class="fx-mighty-panel">
-      <div class="fx-mighty-title">MIGHTY POWER</div>
-      <img src="${cardImg(card.id)}" alt="${card.name}" draggable="false">
-      <div class="fx-mighty-name">${card.name}</div>
+    <div class="fx-power-scene fx-${variant}">
+      <div class="fx-power-art">${html}</div>
+      <div class="fx-power-title">MIGHTY POWER</div>
+      <div class="fx-power-name">${card.name}</div>
     </div>
   `;
   document.body.appendChild(overlay);
-  window.setTimeout(() => overlay.remove(), 1250);
+  window.setTimeout(() => overlay.remove(), duration);
 }
 
-function centeredFx(anchor, className, html, duration = 1150) {
-  const host = document.createElement('div');
-  host.className = className;
-  host.innerHTML = html;
-
-  if (anchor) {
-    const rect = anchor.getBoundingClientRect();
-    host.style.left = `${rect.left + rect.width / 2}px`;
-    host.style.top = `${rect.top + rect.height / 2}px`;
-  } else {
-    host.style.left = '50%';
-    host.style.top = '50%';
-  }
-
-  document.body.appendChild(host);
-  window.setTimeout(() => host.remove(), duration);
-}
-
-function showPickpocketFx(actor, target, card) {
-  showMightyOverlay(card);
-  addFxClass(actor, 'fx-rogue-quick', 900);
-  addFxClass(target, 'fx-pickpocket-target', 900);
-  centeredFx(target || actor, 'fx-pickpocket-scene', `
-    <div class="fx-pocket"></div>
-    <div class="fx-pocket-card"></div>
-    <div class="fx-rogue-hand"></div>
-    <div class="fx-pickpocket-label">PICKED</div>
-  `, 1050);
-}
-
-function showSmokeDisguiseFx(actor, card) {
-  showMightyOverlay(card);
-  addFxClass(actor, 'fx-vanish-panel', 1000);
-  centeredFx(actor, 'fx-smoke-bomb', `
-    <span class="fx-smoke-puff p1"></span>
-    <span class="fx-smoke-puff p2"></span>
-    <span class="fx-smoke-puff p3"></span>
-    <span class="fx-smoke-puff p4"></span>
-    <span class="fx-smoke-label">HIDDEN</span>
-  `, 1100);
-}
-
-function showShieldBreakFx(target, card) {
-  showMightyOverlay(card);
-  addFxClass(target, 'fx-shield-break-panel', 900);
-  centeredFx(target, 'fx-shield-break-scene', `
-    <div class="fx-club"></div>
-    <div class="fx-cracked-shield">
+function shieldHtml(count = 1) {
+  return Array.from({ length: count }, (_, i) => `
+    <div class="fx-symbol-shield s${i + 1}">
       <span class="crack c1"></span>
       <span class="crack c2"></span>
       <span class="crack c3"></span>
     </div>
-    <div class="fx-break-label">BREAK</div>
-  `, 1050);
+  `).join('');
 }
 
-function showOriaxMightyFx(action, card, localPlayerId) {
+function showPickpocketFx(actor, target, card) {
+  addFxClass(actor, 'fx-rogue-quick', 900);
+  addFxClass(target, 'fx-pickpocket-target', 900);
+  showMightyScene(card, 'pickpocket-scene', `
+    <div class="fx-pocket"></div>
+    <div class="fx-pocket-card"></div>
+    <div class="fx-rogue-hand"></div>
+  `);
+}
+
+function showSmokeDisguiseFx(actor, card) {
+  addFxClass(actor, 'fx-vanish-panel', 1000);
+  showMightyScene(card, 'smoke-bomb', `
+    <span class="fx-smoke-puff p1"></span>
+    <span class="fx-smoke-puff p2"></span>
+    <span class="fx-smoke-puff p3"></span>
+    <span class="fx-smoke-puff p4"></span>
+    <span class="fx-smoke-puff p5"></span>
+    <span class="fx-smoke-puff p6"></span>
+  `);
+}
+
+function showShieldBreakFx(target, card) {
+  addFxClass(target, 'fx-shield-break-panel', 900);
+  showMightyScene(card, 'shield-break-scene', `
+    <div class="fx-club"></div>
+    ${shieldHtml(1)}
+  `);
+}
+
+function showFireballFx(card) {
+  showMightyScene(card, 'fireball', `
+    <div class="fx-fireball-core"></div>
+    <div class="fx-fireball-trail t1"></div>
+    <div class="fx-fireball-trail t2"></div>
+    <div class="fx-explosion-ring r1"></div>
+    <div class="fx-explosion-ring r2"></div>
+  `);
+}
+
+function showVampiricFx(card) {
+  showMightyScene(card, 'vampiric', `
+    <div class="fx-bat"><span></span></div>
+    <div class="fx-blood-stream b1"></div>
+    <div class="fx-blood-stream b2"></div>
+    <div class="fx-dark-pulse"></div>
+  `);
+}
+
+function showCharmFx(card) {
+  showMightyScene(card, 'charm', `
+    ${shieldHtml(1)}
+    <div class="fx-charm-spiral"></div>
+    <div class="fx-charm-spark c1"></div>
+    <div class="fx-charm-spark c2"></div>
+    <div class="fx-charm-spark c3"></div>
+  `);
+}
+
+function showDivineInspirationFx(card) {
+  showMightyScene(card, 'divine-inspiration', `
+    <div class="fx-divine-card"></div>
+    <div class="fx-divine-beam"></div>
+    <div class="fx-divine-rays"></div>
+  `);
+}
+
+function showBanishingSmiteFx(card) {
+  showMightyScene(card, 'banishing-smite', `
+    <div class="fx-light-wave"></div>
+    ${shieldHtml(3)}
+  `);
+}
+
+function showMightyTossFx(card) {
+  showMightyScene(card, 'mighty-toss', `
+    <div class="fx-boulder"></div>
+    ${shieldHtml(1)}
+    <div class="fx-impact-burst"></div>
+  `);
+}
+
+function showBattleRoarFx(card) {
+  showMightyScene(card, 'battle-roar', `
+    <div class="fx-roar-mouth"></div>
+    <div class="fx-roar-cone"></div>
+    <div class="fx-roar-line l1"></div>
+    <div class="fx-roar-line l2"></div>
+    <div class="fx-roar-line l3"></div>
+    <div class="fx-roar-line l4"></div>
+  `);
+}
+
+function showWhirlingAxesFx(card) {
+  showMightyScene(card, 'whirling-axes', `
+    <div class="fx-axe a1"></div>
+    <div class="fx-axe a2"></div>
+    <div class="fx-axe-ring"></div>
+  `);
+}
+
+function showCommuneFx(card) {
+  showMightyScene(card, 'commune', `
+    <div class="fx-leaf l1"></div>
+    <div class="fx-leaf l2"></div>
+    <div class="fx-leaf l3"></div>
+    <div class="fx-sprout"><span></span></div>
+    <div class="fx-tree"></div>
+  `);
+}
+
+function showWolfFormFx(card) {
+  showMightyScene(card, 'wolf-form', `
+    <div class="fx-moon"></div>
+    <div class="fx-wolf"></div>
+    <div class="fx-howl-ring"></div>
+  `);
+}
+
+function showBearFormFx(card) {
+  showMightyScene(card, 'bear-form', `
+    <div class="fx-bear"></div>
+    <div class="fx-paw"></div>
+    <div class="fx-ground-crack"></div>
+  `);
+}
+
+function showPrimalStrikeFx(card) {
+  showMightyScene(card, 'primal-strike', `
+    <div class="fx-claw c1"></div>
+    <div class="fx-claw c2"></div>
+    <div class="fx-claw c3"></div>
+    <div class="fx-nature-burst"></div>
+  `);
+}
+
+function showSwapportunityFx(card) {
+  showMightyScene(card, 'swapportunity', `
+    <div class="fx-swap-orbit"></div>
+    <div class="fx-swap-arrow a1"></div>
+    <div class="fx-swap-arrow a2"></div>
+    <div class="fx-hp-token left">HP</div>
+    <div class="fx-hp-token right">HP</div>
+  `);
+}
+
+function showFavoredFrienemiesFx(card) {
+  showMightyScene(card, 'favored-frienemies', `
+    <div class="fx-target-mark m1"></div>
+    <div class="fx-target-mark m2"></div>
+    <div class="fx-target-mark m3"></div>
+    <div class="fx-bonus-spark"></div>
+  `);
+}
+
+function showScoutingFx(card) {
+  showMightyScene(card, 'scouting', `
+    <div class="fx-spyglass"></div>
+    <div class="fx-scan-eye"></div>
+    <div class="fx-scan-line"></div>
+    <div class="fx-scout-card c1"></div>
+    <div class="fx-scout-card c2"></div>
+  `);
+}
+
+function showMightyCardFx(action, card, localPlayerId) {
   const actor = playerPanel(action.playerId, localPlayerId);
   const target = playerPanel(action.targetId, localPlayerId);
 
   switch (card.id) {
+    case 'azzan_fireball':
+      showFireballFx(card);
+      return true;
+    case 'azzan_vampiric_touch':
+      showVampiricFx(card);
+      return true;
+    case 'azzan_charm':
+      showCharmFx(card);
+      return true;
+    case 'lia_divine_inspiration':
+      showDivineInspirationFx(card);
+      return true;
+    case 'lia_banishing_smite':
+      showBanishingSmiteFx(card);
+      return true;
     case 'oriax_pick_pocket':
       showPickpocketFx(actor, target, card);
       return true;
@@ -148,6 +282,36 @@ function showOriaxMightyFx(action, card, localPlayerId) {
       return true;
     case 'oriax_sneak_attack':
       showShieldBreakFx(target, card);
+      return true;
+    case 'sutha_mighty_toss':
+      showMightyTossFx(card);
+      return true;
+    case 'sutha_battle_roar':
+      showBattleRoarFx(card);
+      return true;
+    case 'sutha_whirling_axes':
+      showWhirlingAxesFx(card);
+      return true;
+    case 'jaheira_commune':
+      showCommuneFx(card);
+      return true;
+    case 'jaheira_wolf_form':
+      showWolfFormFx(card);
+      return true;
+    case 'jaheira_bear_form':
+      showBearFormFx(card);
+      return true;
+    case 'jaheira_primal_strike':
+      showPrimalStrikeFx(card);
+      return true;
+    case 'minsc_swapportunity':
+      showSwapportunityFx(card);
+      return true;
+    case 'minsc_favored_frienemies':
+      showFavoredFrienemiesFx(card);
+      return true;
+    case 'minsc_scouting':
+      showScoutingFx(card);
       return true;
     default:
       return false;
@@ -197,8 +361,9 @@ export function playActionAnimations(state, localPlayerId) {
   const hasHeal = symbols.some(sym => sym.type === SYM.HEAL);
   const hasDraw = symbols.some(sym => sym.type === SYM.DRAW);
 
-  if (hasMighty && !showOriaxMightyFx(action, card, localPlayerId)) {
-    showMightyOverlay(card);
+  const showedCardFx = showMightyCardFx(action, card, localPlayerId);
+  if (hasMighty && !showedCardFx) {
+    showMightyScene(card);
   }
 
   if (hasShield) {
