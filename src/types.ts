@@ -45,6 +45,7 @@ export interface HeroDefinition {
 export interface ShieldCard {
   id: string;
   cardId: string;
+  ownerId?: PlayerId;
   remaining: number;
 }
 
@@ -97,6 +98,8 @@ export interface RoomState {
   finishAt?: number | null;
   rolls?: Record<PlayerId, number>;
   playedThisTurn?: Record<PlayerId, string[]>;
+  playedCardOwners?: Record<PlayerId, (PlayerId | null)[]>;
+  borrowedCards?: Record<PlayerId, Record<string, PlayerId[]>>;
   cardsPlayedThisTurn?: number;
   extraPlaysThisTurn?: number;
   extraPlayCardIds?: string[] | null;
