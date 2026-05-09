@@ -349,9 +349,9 @@ export const CARDS = {
   },
   jaheira_wild_rush: {
     id: 'jaheira_wild_rush', heroId: 'jaheira', name: 'Wild Rush', count: 2,
-    symbols: [atk(2)],
+    symbols: [drw(2)],
     formBonus: { bear: [heal(1)], wolf: [atk(1)] },
-    description: 'Deal 2 damage. Bear Form: also heal 1. Wolf Form: also deal 1 more damage.',
+    description: 'Draw 2 cards. Bear Form: also heal 1. Wolf Form: also deal 1 damage.',
   },
   jaheira_eldest_elk: {
     id: 'jaheira_eldest_elk', heroId: 'jaheira', name: 'The Eldest Elk', count: 1,
