@@ -98,6 +98,7 @@ export interface RoomState {
   playedThisTurn?: Record<PlayerId, string[]>;
   cardsPlayedThisTurn?: number;
   extraPlaysThisTurn?: number;
+  extraPlayCardIds?: string[] | null;
   pendingReclaim?: PlayerId | null;
   pendingShieldPick?: PendingShieldPick | null;
   pendingPickpocket?: PendingPickpocket | null;

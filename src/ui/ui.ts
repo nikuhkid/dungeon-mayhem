@@ -38,6 +38,77 @@ let endTurnTick             = 0;
 let pickpocketTargetMode    = false;
 let pickpocketAutoResolving = false;
 
+function effectiveSymbols(card, state, actorId) {
+  let symbols = card?.symbols || [];
+  if (card?.formBonus) {
+    const form = state?.players?.[actorId]?.jaheiraForm ?? 'none';
+    const bonus = card.formBonus[form];
+    if (bonus?.length) symbols = [...symbols, ...bonus];
+  }
+  return symbols;
+}
+
+function shieldTargetEffect(card) {
+  return card?.symbols?.find(
+    s => s.type === SYM.MIGHTY && (s.effect === 'steal_shield' || s.effect === 'destroy_one_shield')
+  )?.effect ?? null;
+}
+
+function aliveCount(state) {
+  return Object.values(state.players || {}).filter(p => !p.eliminated).length;
+}
+
+function hasShieldCards(player) {
+  return (player?.shieldCards || []).length > 0;
+}
+
+function targetCandidatesForCard(state, actorId, card) {
+  if (!state || !card) return [];
+  const effect = shieldTargetEffect(card);
+  const count = aliveCount(state);
+
+  if (effect === 'steal_shield') {
+    return Object.entries(state.players)
+      .filter(([pid, p]) => pid !== actorId && !p.eliminated && !p.immune && hasShieldCards(p))
+      .map(([pid]) => pid);
+  }
+
+  if (effect === 'destroy_one_shield') {
+    return Object.entries(state.players)
+      .filter(([pid, p]) => !p.eliminated && hasShieldCards(p) && (pid === actorId || !p.immune || count <= 2))
+      .map(([pid]) => pid);
+  }
+
+  const needsOpponent = effectiveSymbols(card, state, actorId).some(s => s.target === 'opponent');
+  if (!needsOpponent) return [];
+
+  return Object.entries(state.players)
+    .filter(([pid, p]) => pid !== actorId && !p.eliminated && (!p.immune || count <= 2))
+    .map(([pid]) => pid);
+}
+
+function cardNeedsTargetForState(card, state, actorId) {
+  return targetCandidatesForCard(state, actorId, card).length > 0;
+}
+
+function activeTargetCard(state) {
+  if (pickpocketTargetMode) return CARDS[state?.pendingPickpocket?.stolenCardId];
+  return CARDS[pendingCard];
+}
+
+function isTargetablePlayer(state, targetId) {
+  const card = activeTargetCard(state);
+  return targetCandidatesForCard(state, playerId, card).includes(targetId);
+}
+
+function isRestrictedExtraPlayBlocked(cardId, state) {
+  const allowed = state?.extraPlayCardIds;
+  if (!allowed?.length) return false;
+  const played = state.cardsPlayedThisTurn || 0;
+  const extra = state.extraPlaysThisTurn || 0;
+  return played > 0 && played <= extra && !allowed.includes(cardId);
+}
+
 // --- HP hearts helper ---
 
 function hpHearts(hp, compact = false) {
@@ -334,17 +405,7 @@ function initGame() {
     if (roomState) renderGame(roomState);
   });
 
-  document.getElementById('opponents-area').addEventListener('click', async (e) => {
-    if (!selectingTarget || playingCard) return;
-    const panel = e.target.closest('.opponent-panel');
-    if (!panel) return;
-    const tid = panel.dataset.pid;
-    if (!tid) return;
-    const target = roomState?.players[tid];
-    if (!target || target.eliminated) return;
-    const aliveCount = Object.values(roomState.players).filter(p => !p.eliminated).length;
-    if (target.immune && aliveCount > 2) return;
-
+  async function playSelectedTarget(tid) {
     if (pickpocketTargetMode) {
       pickpocketTargetMode    = false;
       selectingTarget         = false;
@@ -368,6 +429,23 @@ function initGame() {
     } finally {
       playingCard = false;
     }
+  }
+
+  document.getElementById('opponents-area').addEventListener('click', async (e) => {
+    if (!selectingTarget || playingCard) return;
+    const panel = e.target.closest('.opponent-panel');
+    if (!panel) return;
+    const tid = panel.dataset.pid;
+    if (!tid) return;
+    if (!isTargetablePlayer(roomState, tid)) return;
+    await playSelectedTarget(tid);
+  });
+
+  document.getElementById('self-panel').addEventListener('click', async (e) => {
+    if (!selectingTarget || playingCard) return;
+    if (e.target.closest('.hand-card')) return;
+    if (!isTargetablePlayer(roomState, playerId)) return;
+    await playSelectedTarget(playerId);
   });
 
   document.getElementById('hand-area').addEventListener('click', async (e) => {
@@ -386,12 +464,9 @@ function initGame() {
     const card = CARDS[cid];
     const me   = roomState.players[playerId];
 
-    let needsTarget = cardNeedsTarget(card);
-    if (!needsTarget && card?.formBonus) {
-      const form = me?.jaheiraForm ?? 'none';
-      const bonus = card.formBonus[form];
-      if (bonus?.some(s => s.target === 'opponent')) needsTarget = true;
-    }
+    if (isFormBlocked(card, me) || isRestrictedExtraPlayBlocked(cid, roomState)) return;
+
+    let needsTarget = cardNeedsTargetForState(card, roomState, playerId);
 
     if (needsTarget) {
       pendingCard     = cid;
@@ -468,13 +543,13 @@ function renderGame(state) {
   if (state.pendingPickpocket?.pickerId === playerId) {
     const pick     = state.pendingPickpocket;
     const card     = CARDS[pick.stolenCardId];
-    const hasAttack = card?.symbols?.some(s => s.type === SYM.ATTACK && s.target === 'opponent');
-    showPickpocketReveal(pick.stolenCardId, hasAttack);
-    if (hasAttack && !pickpocketTargetMode) {
+    const needsTarget = cardNeedsTargetForState(card, state, playerId);
+    showPickpocketReveal(pick.stolenCardId, needsTarget);
+    if (needsTarget && !pickpocketTargetMode) {
       pickpocketTargetMode = true;
       selectingTarget      = true;
     }
-    if (!hasAttack && !pickpocketAutoResolving) {
+    if (!needsTarget && !pickpocketAutoResolving) {
       pickpocketAutoResolving = true;
       setTimeout(async () => {
         pickpocketAutoResolving = false;
@@ -672,11 +747,10 @@ function renderOpponents(state) {
     .filter(pid => pid !== playerId)
     .map(pid => [pid, state.players[pid]])
     .filter(([, p]) => p);
-  const aliveCount = Object.values(state.players).filter(p => !p.eliminated).length;
 
   document.getElementById('opponents-area').innerHTML = ordered.map(([pid, p]) => {
     const hero         = p.heroId ? HEROES[p.heroId] : null;
-    const isTargetable = selectingTarget && !p.eliminated && (!p.immune || aliveCount <= 2);
+    const isTargetable = selectingTarget && isTargetablePlayer(state, pid);
     const isActive     = state.currentTurn === pid;
     const selClass     = isTargetable ? ' selectable' : '';
     const elimClass    = p.eliminated ? ' eliminated' : '';
@@ -709,6 +783,8 @@ function renderSelf(state) {
   if (!me) return;
 
   document.getElementById('self-panel').classList.toggle('active-turn', state.currentTurn === playerId);
+  const selfTargetable = selectingTarget && isTargetablePlayer(state, playerId);
+  document.getElementById('self-panel').classList.toggle('selectable', selfTargetable);
 
   if (me.eliminated) {
     document.getElementById('self-info').innerHTML =
@@ -735,6 +811,7 @@ function renderSelf(state) {
           ${hpHearts(me.hp)}
           ${(me.shieldCards || []).map(sc => `<span class="stat-shield shield-card-badge" data-card-src="${cardImg(sc.cardId)}" title="${escHtml(CARDS[sc.cardId]?.name ?? sc.cardId)}">shld:${sc.remaining}</span>`).join('')}
         </div>
+        ${selfTargetable ? '<div class="target-hint">[ click to target self ]</div>' : ''}
       </div>
     </div>`;
 
@@ -802,7 +879,7 @@ function renderHand(state) {
   document.getElementById('hand-area').innerHTML = (me.hand || []).map(cid => {
     const card      = CARDS[cid];
     const isPending = cid === pendingCard;
-    const blocked   = isFormBlocked(card, me);
+    const blocked   = isFormBlocked(card, me) || isRestrictedExtraPlayBlocked(cid, state);
     const classes   = [
       canPlay && !blocked ? 'playable' : '',
       isPending           ? 'pending'  : '',
@@ -814,8 +891,8 @@ function renderHand(state) {
       ? `${card.name}${card.description ? ' — ' + cardDesc(card, me) : ''}`
       : cid;
 
-    const lockOverlay = blocked && card?.requiresForm
-      ? `<div class="form-lock-overlay"><span>${card.requiresForm} form only</span></div>`
+    const lockOverlay = blocked
+      ? `<div class="form-lock-overlay"><span>${card?.requiresForm ? card.requiresForm + ' form only' : 'shapeshift only'}</span></div>`
       : '';
 
     return `<div class="hand-card${classes ? ' ' + classes : ''}" data-cid="${cid}">
@@ -910,6 +987,8 @@ function updateGameButtons(state) {
     hint.textContent = 'Choose a shield card';
   } else if (played === 0) {
     hint.textContent = 'Play a card to end your turn';
+  } else if (state.extraPlayCardIds?.length) {
+    hint.textContent = 'Play a shapeshift card';
   } else if (played <= extra) {
     const left = extra - played + 1;
     hint.textContent = `${left} extra play${left !== 1 ? 's' : ''} remaining`;
@@ -946,12 +1025,12 @@ function playTurnSound() {
 
 // --- Pickpocket reveal ---
 
-function showPickpocketReveal(cardId, hasAttack) {
+function showPickpocketReveal(cardId, needsTarget) {
   const el   = document.getElementById('pickpocket-reveal');
   const card = CARDS[cardId];
   document.getElementById('pickpocket-card-name').textContent = card?.name ?? cardId;
-  document.getElementById('pickpocket-hint').textContent = hasAttack
-    ? 'Attack card — choose a target'
+  document.getElementById('pickpocket-hint').textContent = needsTarget
+    ? 'Choose a target'
     : 'Resolving automatically...';
   el.classList.remove('hidden');
 }

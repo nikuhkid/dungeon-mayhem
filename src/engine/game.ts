@@ -149,6 +149,8 @@ function stealTopDeckCard(players, decks, discardPiles, fromPlayerId, toPlayerId
   return stolenId;
 }
 
+const JAHEIRA_FORM_CARD_IDS = ['jaheira_wolf_form', 'jaheira_bear_form'];
+
 // --- Turn management ---
 
 export async function startRollingPhase(roomCode, roomState) {
@@ -178,6 +180,7 @@ export async function startGame(roomCode, roomState) {
     winner: null,
     cardsPlayedThisTurn: 0,
     extraPlaysThisTurn: 0,
+    extraPlayCardIds: null,
     pendingReclaim: null,
     pendingShieldPick: null,
     pendingPickpocket: null,
@@ -264,6 +267,7 @@ export async function startTurn(roomCode, playerId, roomState) {
   updates.turnPhase           = 'playing';
   updates.cardsPlayedThisTurn = 0;
   updates.extraPlaysThisTurn  = 0;
+  updates.extraPlayCardIds    = null;
   updates.pendingReclaim      = null;
   updates.pendingShieldPick   = null;
   updates.pendingPickpocket   = null;
@@ -281,6 +285,7 @@ export async function endTurn(roomCode, roomState, playerId) {
   const updates = {
     cardsPlayedThisTurn: 0,
     extraPlaysThisTurn:  0,
+    extraPlayCardIds:    null,
     pendingReclaim:      null,
     pendingShieldPick:   null,
     pendingPickpocket:   null,
@@ -319,6 +324,13 @@ export async function playCard(roomCode, roomState, playerId, cardId, targetId =
   hand.splice(idx, 1);
   const played = [...(roomState.playedThisTurn?.[playerId] || []), cardId];
   const card = CARDS[cardId];
+  const restrictedExtraCardIds = roomState.extraPlayCardIds || null;
+  const isRestrictedExtraPlay =
+    restrictedExtraCardIds?.length &&
+    (roomState.cardsPlayedThisTurn || 0) > 0 &&
+    (roomState.cardsPlayedThisTurn || 0) <= (roomState.extraPlaysThisTurn || 0);
+
+  if (isRestrictedExtraPlay && !restrictedExtraCardIds.includes(cardId)) return;
 
   const targetName = targetId ? roomState.players[targetId]?.name : null;
   const entry = logEntry(
@@ -333,6 +345,10 @@ export async function playCard(roomCode, roomState, playerId, cardId, targetId =
     actionLog:           pushLog(roomState.actionLog, entry),
     cardsPlayedThisTurn: (roomState.cardsPlayedThisTurn || 0) + 1,
   };
+
+  if (isRestrictedExtraPlay) {
+    updates.extraPlayCardIds = null;
+  }
 
   // Build symbols: base always active, formBonus appended if matching form
   let symbolsToResolve = card?.symbols || [];
@@ -446,18 +462,13 @@ export async function resolvePickpocket(roomCode, roomState, pickerId, attackTar
   const stolenCard = CARDS[stolenCardId];
   const updates = { pendingPickpocket: null };
 
-  if (stolenCard?.symbols) {
-    const nonMighty = stolenCard.symbols.filter(
-      s => s.type !== SYM.MIGHTY && s.type !== SYM.RECLAIM && s.type !== SYM.PLAY_AGAIN
+  if (stolenCard?.symbols?.length) {
+    const effectUpdates = resolveSymbols(
+      stolenCard.symbols,
+      { playerId: pickerId, targetId: attackTargetId, cardId: stolenCardId },
+      roomState
     );
-    if (nonMighty.length > 0) {
-      const effectUpdates = resolveSymbols(
-        nonMighty,
-        { playerId: pickerId, targetId: attackTargetId, cardId: stolenCardId },
-        roomState
-      );
-      Object.assign(updates, effectUpdates);
-    }
+    Object.assign(updates, effectUpdates);
   }
 
   // Stage card in picker's playedThisTurn — startTurn will route to owner's discard
@@ -571,9 +582,7 @@ export function resolveSymbols(symbols, context, roomState) {
 
   for (const _sym of reclaimSyms) {
     const disc = discardPiles[playerId] || [];
-    if (disc.length === 0) {
-      healPlayer(players, playerId, 2);
-    } else {
+    if (disc.length > 0) {
       pendingReclaim = true;
     }
   }
@@ -620,6 +629,8 @@ export function resolveSymbols(symbols, context, roomState) {
 
   if (bonusPlays > 0)
     updates.extraPlaysThisTurn = (roomState.extraPlaysThisTurn || 0) + bonusPlays;
+  if (ctx.extraPlayCardIds)
+    updates.extraPlayCardIds = ctx.extraPlayCardIds;
   if (pendingReclaim)
     updates.pendingReclaim = playerId;
   if (ctx.shieldPickRequest)
@@ -669,12 +680,7 @@ function resolveMighty(sym, context, players, decks, discardPiles) {
       if (!targetId || !players[targetId] || players[targetId].immune) break;
       const targetShields = players[targetId].shieldCards || [];
       if (targetShields.length === 0) break;
-      if (targetShields.length === 1) {
-        players[playerId].shieldCards = [...(players[playerId].shieldCards || []), targetShields[0]];
-        players[targetId].shieldCards = [];
-      } else {
-        context.shieldPickRequest = { effect: 'steal_shield', targetId };
-      }
+      context.shieldPickRequest = { effect: 'steal_shield', targetId };
       break;
     }
 
@@ -722,7 +728,7 @@ function resolveMighty(sym, context, players, decks, discardPiles) {
     }
 
     case 'destroy_one_shield': {
-      if (!targetId || !players[targetId] || players[targetId].immune) break;
+      if (!targetId || !players[targetId] || (targetId !== playerId && players[targetId].immune)) break;
       const ts = players[targetId].shieldCards || [];
       if (ts.length === 0) break;
       if (ts.length === 1) {
@@ -784,8 +790,11 @@ function resolveMighty(sym, context, players, decks, discardPiles) {
 
     case 'commune_with_nature': {
       drawToHand(players, decks, discardPiles, playerId, 2);
-      const formSet = new Set(['jaheira_wolf_form', 'jaheira_bear_form']);
-      if ((players[playerId].hand || []).some(cid => formSet.has(cid))) grantBonusPlay(result);
+      const formSet = new Set(JAHEIRA_FORM_CARD_IDS);
+      if ((players[playerId].hand || []).some(cid => formSet.has(cid))) {
+        grantBonusPlay(result);
+        context.extraPlayCardIds = JAHEIRA_FORM_CARD_IDS;
+      }
       break;
     }
   }
@@ -835,6 +844,7 @@ export async function resetRoom(roomCode, roomState) {
     actionLog:           [],
     cardsPlayedThisTurn: 0,
     extraPlaysThisTurn:  0,
+    extraPlayCardIds:    null,
     pendingReclaim:      null,
     pendingShieldPick:   null,
     pendingPickpocket:   null,

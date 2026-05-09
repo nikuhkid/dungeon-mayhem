@@ -90,7 +90,7 @@ export const CARDS = {
   azzan_charm: {
     id: 'azzan_charm', heroId: 'azzan', name: 'Charm', count: 2,
     symbols: [mty('steal_shield', { target: 'opponent' })],
-    description: "Steal an opponent's shields — they now protect you",
+    description: "Steal one shield card from an opponent",
   },
   azzan_shield: {
     id: 'azzan_shield', heroId: 'azzan', name: 'Shield', count: 2,
@@ -207,7 +207,7 @@ export const CARDS = {
   oriax_sneak_attack: {
     id: 'oriax_sneak_attack', heroId: 'oriax', name: 'Sneak Attack!', count: 2,
     symbols: [mty('destroy_one_shield', { target: 'opponent' }), again()],
-    description: 'Destroy all shields of one chosen opponent and play again',
+    description: 'Destroy one shield card from any player and play again',
   },
   oriax_even_more_daggers: {
     id: 'oriax_even_more_daggers', heroId: 'oriax', name: 'Even More Daggers', count: 1,
@@ -232,7 +232,7 @@ export const CARDS = {
   oriax_pick_pocket: {
     id: 'oriax_pick_pocket', heroId: 'oriax', name: 'Pick Pocket', count: 2,
     symbols: [mty('pickpocket', { target: 'opponent' })],
-    description: "Steal the top card of an opponent's deck into your hand",
+    description: "Steal the top card of an opponent's deck and use it immediately",
   },
 
   // =============================================
@@ -243,7 +243,7 @@ export const CARDS = {
   sutha_mighty_toss: {
     id: 'sutha_mighty_toss', heroId: 'sutha', name: 'Mighty Toss', count: 2,
     symbols: [mty('destroy_one_shield', { target: 'opponent' }), drw(1)],
-    description: 'Destroy all shields of one chosen opponent and draw 1 card',
+    description: 'Destroy one shield card from any player and draw 1 card',
   },
   sutha_battle_roar: {
     id: 'sutha_battle_roar', heroId: 'sutha', name: 'Battle Roar', count: 2,
@@ -377,7 +377,7 @@ export const CARDS = {
   jaheira_commune: {
     id: 'jaheira_commune', heroId: 'jaheira', name: 'Commune with Nature', count: 2,
     symbols: [mty('commune_with_nature')],
-    description: 'Draw 2 cards. If a form card is in hand after drawing, play it for free.',
+    description: 'Draw 2 cards. If a shapeshift card is in hand after drawing, play one shapeshift card for free.',
   },
   jaheira_wolf_form: {
     id: 'jaheira_wolf_form', heroId: 'jaheira', name: 'Shapeshift: Wolf Form', count: 3,

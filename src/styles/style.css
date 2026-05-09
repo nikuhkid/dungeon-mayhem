@@ -448,7 +448,8 @@ button.secondary {
   box-shadow: 4px 4px 0 var(--red-dark);
 }
 
-.opponent-panel.selectable:hover {
+.opponent-panel.selectable:hover,
+#self-panel.selectable:hover {
   transform: translate(-2px, -2px);
   box-shadow: 6px 6px 0 var(--red-dark);
 }
@@ -695,6 +696,12 @@ button.secondary {
 #self-panel.active-turn {
   border-color: var(--gold);
   box-shadow: 3px 3px 0 var(--gold-dark);
+}
+
+#self-panel.selectable {
+  border-color: var(--red);
+  cursor: pointer;
+  box-shadow: 4px 4px 0 var(--red-dark);
 }
 
 #self-info { margin-bottom: 0.5rem; }

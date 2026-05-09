@@ -40,13 +40,48 @@ function randomFrom(arr) {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
-function pickTarget(state, botId) {
+function shieldTargetEffect(card) {
+  return card?.symbols?.find(
+    s => s.type === SYM.MIGHTY && (s.effect === 'steal_shield' || s.effect === 'destroy_one_shield')
+  )?.effect ?? null;
+}
+
+function hasShieldCards(player) {
+  return (player?.shieldCards || []).length > 0;
+}
+
+function targetCandidatesForCard(state, botId, card) {
+  const effect = shieldTargetEffect(card);
   const aliveCount = Object.values(state.players).filter(p => !p.eliminated).length;
-  const candidates = Object.entries(state.players).filter(
-    ([pid, p]) => pid !== botId && !p.eliminated && (!p.immune || aliveCount <= 2)
-  );
-  if (candidates.length === 0) return null;
-  return randomFrom(candidates)[0];
+
+  if (effect === 'steal_shield') {
+    return Object.entries(state.players)
+      .filter(([pid, p]) => pid !== botId && !p.eliminated && !p.immune && hasShieldCards(p))
+      .map(([pid]) => pid);
+  }
+
+  if (effect === 'destroy_one_shield') {
+    return Object.entries(state.players)
+      .filter(([pid, p]) => !p.eliminated && hasShieldCards(p) && (pid === botId || !p.immune || aliveCount <= 2))
+      .map(([pid]) => pid);
+  }
+
+  if (!cardNeedsTarget(card)) return [];
+  return Object.entries(state.players)
+    .filter(([pid, p]) => pid !== botId && !p.eliminated && (!p.immune || aliveCount <= 2))
+    .map(([pid]) => pid);
+}
+
+function cardNeedsTargetForState(state, botId, card) {
+  return targetCandidatesForCard(state, botId, card).length > 0;
+}
+
+function isRestrictedExtraPlayBlocked(cardId, state) {
+  const allowed = state.extraPlayCardIds;
+  if (!allowed?.length) return false;
+  const played = state.cardsPlayedThisTurn || 0;
+  const extra = state.extraPlaysThisTurn || 0;
+  return played > 0 && played <= extra && !allowed.includes(cardId);
 }
 
 async function _act(roomCode, state, botId) {
@@ -76,10 +111,10 @@ async function _act(roomCode, state, botId) {
     await delay(700);
     const { stolenCardId } = state.pendingPickpocket;
     const stolen = CARDS[stolenCardId];
-    const hasAttack = stolen?.symbols?.some(
-      s => s.type === SYM.ATTACK && s.target === 'opponent'
-    );
-    const targetId = hasAttack ? pickTarget(state, botId) : null;
+    const candidates = targetCandidatesForCard(state, botId, stolen);
+    const targetId = cardNeedsTargetForState(state, botId, stolen) && candidates.length > 0
+      ? randomFrom(candidates)
+      : null;
     await resolvePickpocket(roomCode, state, botId, targetId);
     return;
   }
@@ -113,7 +148,7 @@ async function _act(roomCode, state, botId) {
     // Skip form-locked cards (bot doesn't manage forms)
     const playable = hand.filter(cid => {
       const card = CARDS[cid];
-      return card && !card.requiresForm;
+      return card && !card.requiresForm && !isRestrictedExtraPlayBlocked(cid, state);
     });
 
     if (playable.length === 0) {
@@ -125,8 +160,9 @@ async function _act(roomCode, state, botId) {
     const card = CARDS[cid];
 
     let targetId = null;
-    if (cardNeedsTarget(card)) {
-      targetId = pickTarget(state, botId);
+    if (cardNeedsTargetForState(state, botId, card)) {
+      const candidates = targetCandidatesForCard(state, botId, card);
+      targetId = candidates.length > 0 ? randomFrom(candidates) : null;
       if (!targetId) {
         await endTurn(roomCode, state, botId);
         return;
