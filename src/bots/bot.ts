@@ -24,8 +24,8 @@ export async function driveBotTurn(roomCode, state, getState) {
         break;
       }
       await _act(roomCode, s, botId);
-      // Brief pause for Firestore subscription to update roomState
-      await new Promise(r => setTimeout(r, 120));
+      // Let Firestore subscriptions and table animations catch up between bot actions.
+      await new Promise(r => setTimeout(r, 400));
       s = getState ? getState() : null;
       if (!s) break;
     }
