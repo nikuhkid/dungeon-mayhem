@@ -861,8 +861,13 @@ export async function resetRoom(roomCode, roomState) {
   };
 
   for (const pid of Object.keys(roomState.players)) {
-    updates[`players.${pid}.heroId`]          = null;
-    updates[`players.${pid}.ready`]           = false;
+    const isBot = pid.startsWith('bot_');
+    if (!isBot) {
+      updates[`players.${pid}.heroId`]        = null;
+      updates[`players.${pid}.ready`]         = false;
+    } else {
+      updates[`players.${pid}.ready`]         = true;
+    }
     updates[`players.${pid}.hp`]              = 10;
     updates[`players.${pid}.hand`]            = [];
     updates[`players.${pid}.shieldCards`]     = [];
