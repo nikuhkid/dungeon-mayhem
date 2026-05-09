@@ -137,7 +137,8 @@ async function _act(roomCode, state, botId) {
       return;
     }
 
-    await delay(900);
+    const isFollowUpPlay = played > 0 && played <= extra;
+    await delay(isFollowUpPlay ? 1400 : 900);
 
     const hand = state.players[botId]?.hand || [];
     if (hand.length === 0) {

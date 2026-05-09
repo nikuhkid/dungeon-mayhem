@@ -293,6 +293,17 @@ export async function endTurn(roomCode, roomState, playerId) {
 
   updates[`players.${playerId}.frienemiesBonus`] = 0;
 
+  const activeShieldCardIds = new Set(
+    (roomState.players[playerId]?.shieldCards || []).map(sc => sc.cardId)
+  );
+  if (activeShieldCardIds.size > 0) {
+    const played = roomState.playedThisTurn?.[playerId] || [];
+    const withoutActiveShields = played.filter(cid => !activeShieldCardIds.has(cid));
+    if (withoutActiveShields.length !== played.length) {
+      updates[`playedThisTurn.${playerId}`] = withoutActiveShields;
+    }
+  }
+
   const nextId = getNextTurn(roomState.turnOrder, playerId, roomState.players);
   const entry  = logEntry(`${roomState.players[playerId].name} ended their turn`, { playerId });
 
