@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { CARDS, SYM, shuffle, buildDeck, buildRemixDecks } from '../data/cards';
+import { CARDS, SYM, shuffle, buildDeck, buildRemixDecks, getEffectiveCardSymbols } from '../data/cards';
 import { updateRoom } from '../firebase/firebase';
 
 // --- Internal helpers ---
@@ -192,10 +192,11 @@ export async function startGame(roomCode, roomState) {
   const remixDecks = roomState.gameMode === 'remix'
     ? buildRemixDecks(roomState.players)
     : null;
+  updates.remixPowerAssignments = remixDecks?.remixPowerAssignments ?? null;
 
   for (const pid of playerIds) {
     const heroId   = roomState.players[pid].heroId;
-    const fullDeck = remixDecks ? remixDecks[pid] : buildDeck(heroId);
+    const fullDeck = remixDecks ? remixDecks.decks[pid] : buildDeck(heroId);
     const { deck, drawn } = drawCards(fullDeck, [], 3);
     decks[pid] = deck;
     discardPiles[pid] = [];
@@ -361,13 +362,7 @@ export async function playCard(roomCode, roomState, playerId, cardId, targetId =
     updates.extraPlayCardIds = null;
   }
 
-  // Build symbols: base always active, formBonus appended if matching form
-  let symbolsToResolve = card?.symbols || [];
-  if (card?.formBonus) {
-    const form = roomState.players[playerId].jaheiraForm ?? 'none';
-    const bonus = card.formBonus[form];
-    if (bonus?.length) symbolsToResolve = [...symbolsToResolve, ...bonus];
-  }
+  const symbolsToResolve = getEffectiveCardSymbols(card, roomState, playerId);
 
   if (symbolsToResolve?.length) {
     const stateForEffect = {
@@ -475,7 +470,7 @@ export async function resolvePickpocket(roomCode, roomState, pickerId, attackTar
 
   if (stolenCard?.symbols?.length) {
     const effectUpdates = resolveSymbols(
-      stolenCard.symbols,
+      getEffectiveCardSymbols(stolenCard, roomState, pickerId),
       { playerId: pickerId, targetId: attackTargetId, cardId: stolenCardId },
       roomState
     );
@@ -856,6 +851,7 @@ export async function resetRoom(roomCode, roomState) {
     cardsPlayedThisTurn: 0,
     extraPlaysThisTurn:  0,
     extraPlayCardIds:    null,
+    remixPowerAssignments: null,
     pendingReclaim:      null,
     pendingShieldPick:   null,
     pendingPickpocket:   null,

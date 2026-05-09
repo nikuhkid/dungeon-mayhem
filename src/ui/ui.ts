@@ -1,7 +1,7 @@
 // @ts-nocheck
 import { getOrCreatePlayerId, handleCreateRoom, handleJoinRoom, selectHero, setReady, startGameIfReady, isHost, addBot, setGameMode } from '../firebase/room';
 import { subscribeToRoom } from '../firebase/firebase';
-import { HEROES, CARDS, SYM, cardNeedsTarget } from '../data/cards';
+import { HEROES, CARDS, SYM, getEffectiveCardSymbols } from '../data/cards';
 import { startRollingPhase, startGame, startTurn, endTurn, playCard, reclaimCard, resolveShieldPick, resolvePickpocket, resetRoom } from '../engine/game';
 import { isBot, driveBotTurn } from '../bots/bot';
 import { playActionAnimations } from './animations';
@@ -39,13 +39,7 @@ let pickpocketTargetMode    = false;
 let pickpocketAutoResolving = false;
 
 function effectiveSymbols(card, state, actorId) {
-  let symbols = card?.symbols || [];
-  if (card?.formBonus) {
-    const form = state?.players?.[actorId]?.jaheiraForm ?? 'none';
-    const bonus = card.formBonus[form];
-    if (bonus?.length) symbols = [...symbols, ...bonus];
-  }
-  return symbols;
+  return getEffectiveCardSymbols(card, state, actorId);
 }
 
 function shieldTargetEffect(card) {

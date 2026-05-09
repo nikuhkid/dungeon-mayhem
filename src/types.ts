@@ -99,6 +99,12 @@ export interface RoomState {
   cardsPlayedThisTurn?: number;
   extraPlaysThisTurn?: number;
   extraPlayCardIds?: string[] | null;
+  remixPowerAssignments?: Record<PlayerId, {
+    ids: string[];
+    itemKeys: string[];
+    sourceHeroIds: HeroId[];
+    slotsUsed: number;
+  }> | null;
   pendingReclaim?: PlayerId | null;
   pendingShieldPick?: PendingShieldPick | null;
   pendingPickpocket?: PendingPickpocket | null;

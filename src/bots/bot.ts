@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { CARDS, SYM, cardNeedsTarget } from '../data/cards';
+import { CARDS, SYM, getEffectiveCardSymbols } from '../data/cards';
 import { startTurn, endTurn, playCard, reclaimCard, resolveShieldPick, resolvePickpocket } from '../engine/game';
 
 export function isBot(playerId) {
@@ -66,7 +66,8 @@ function targetCandidatesForCard(state, botId, card) {
       .map(([pid]) => pid);
   }
 
-  if (!cardNeedsTarget(card)) return [];
+  const needsOpponent = getEffectiveCardSymbols(card, state, botId).some(s => s.target === 'opponent');
+  if (!needsOpponent) return [];
   return Object.entries(state.players)
     .filter(([pid, p]) => pid !== botId && !p.eliminated && (!p.immune || aliveCount <= 2))
     .map(([pid]) => pid);
