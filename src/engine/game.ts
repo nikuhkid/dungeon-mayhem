@@ -1,5 +1,6 @@
 // @ts-nocheck
-import { HEROES, CARDS, SYM, shuffle, buildDeck, buildRemixDecks, getEffectiveCardSymbols } from '../data/cards';
+import { HEROES, CARDS, SYM, shuffle, buildDeck } from '../data/cards';
+import { buildRemixDecks, getEffectiveCardSymbols } from '../data/remix';
 import { getRoomState, updateRoom } from '../firebase/firebase';
 
 // --- Internal helpers ---

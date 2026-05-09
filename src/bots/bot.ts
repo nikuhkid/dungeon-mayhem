@@ -1,5 +1,6 @@
 // @ts-nocheck
-import { CARDS, SYM, getEffectiveCardSymbols } from '../data/cards';
+import { CARDS, SYM } from '../data/cards';
+import { getEffectiveCardSymbols } from '../data/remix';
 import { startTurn, endTurn, playCard, reclaimCard, resolveShieldPick, resolvePickpocket, skipEliminatedCurrentTurn } from '../engine/game';
 
 export function isBot(playerId) {

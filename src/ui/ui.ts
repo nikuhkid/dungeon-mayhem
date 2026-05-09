@@ -1,7 +1,8 @@
 // @ts-nocheck
 import { getOrCreatePlayerId, handleCreateRoom, handleJoinRoom, selectHero, setReady, startGameIfReady, isHost, addBot, setGameMode } from '../firebase/room';
 import { subscribeToRoom } from '../firebase/firebase';
-import { HEROES, CARDS, SYM, getEffectiveCardSymbols } from '../data/cards';
+import { HEROES, CARDS, SYM } from '../data/cards';
+import { getEffectiveCardSymbols } from '../data/remix';
 import { startRollingPhase, startGame, startTurn, endTurn, playCard, reclaimCard, resolveShieldPick, resolvePickpocket, resetRoom, finishGame, skipEliminatedCurrentTurn } from '../engine/game';
 import { isBot, driveBotTurn } from '../bots/bot';
 import { playActionAnimations } from './animations';
