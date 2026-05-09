@@ -1,6 +1,27 @@
 # Dungeon Mayhem — Browser Multiplayer
 
-Vanilla JS + Firebase Firestore + GitHub Pages. No backend.
+TypeScript + Vite + Firebase Firestore. No custom backend yet.
+
+This branch is the TypeScript/Vite migration branch. The preserved vanilla-JS
+prototype is available at:
+
+- tag: `prototype-vanilla-js-v1`
+- branch: `prototype/vanilla-js-working`
+
+## Local development
+
+```bash
+npm install
+npm run dev
+```
+
+## Production build
+
+```bash
+npm run build
+```
+
+The app is configured with Vite `base: '/dungeon-mayhem/'` for GitHub Pages.
 
 ## Setup
 

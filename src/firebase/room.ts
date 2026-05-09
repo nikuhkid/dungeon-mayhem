@@ -1,5 +1,6 @@
-import { roomExists, createRoom, joinRoom, updateRoom, updatePlayer, subscribeToRoom } from './firebase.js';
-import { HEROES } from './cards.js';
+// @ts-nocheck
+import { roomExists, createRoom, joinRoom, updateRoom, updatePlayer, subscribeToRoom } from './firebase';
+import { HEROES } from '../data/cards';
 
 export async function addBot(roomCode, roomState) {
   const players     = roomState.players || {};

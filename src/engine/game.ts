@@ -1,5 +1,6 @@
-import { CARDS, SYM, shuffle, buildDeck, buildRemixDecks } from './cards.js';
-import { updateRoom } from './firebase.js';
+// @ts-nocheck
+import { CARDS, SYM, shuffle, buildDeck, buildRemixDecks } from '../data/cards';
+import { updateRoom } from '../firebase/firebase';
 
 // --- Internal helpers ---
 

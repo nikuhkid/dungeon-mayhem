@@ -1,4 +1,4 @@
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { initializeApp } from 'firebase/app';
 import {
   getFirestore,
   doc,
@@ -8,7 +8,7 @@ import {
   onSnapshot,
   arrayUnion,
   serverTimestamp
-} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+} from 'firebase/firestore';
 
 // ============================================================
 // REPLACE THIS BLOCK WITH YOUR FIREBASE PROJECT CONFIG

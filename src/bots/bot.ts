@@ -1,5 +1,6 @@
-import { CARDS, SYM, cardNeedsTarget } from './cards.js';
-import { startTurn, endTurn, playCard, reclaimCard, resolveShieldPick, resolvePickpocket } from './game.js';
+// @ts-nocheck
+import { CARDS, SYM, cardNeedsTarget } from '../data/cards';
+import { startTurn, endTurn, playCard, reclaimCard, resolveShieldPick, resolvePickpocket } from '../engine/game';
 
 export function isBot(playerId) {
   return typeof playerId === 'string' && playerId.startsWith('bot_');

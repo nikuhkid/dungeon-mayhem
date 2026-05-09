@@ -1,8 +1,9 @@
-import { getOrCreatePlayerId, handleCreateRoom, handleJoinRoom, selectHero, setReady, startGameIfReady, isHost, addBot, setGameMode } from './room.js';
-import { subscribeToRoom } from './firebase.js';
-import { HEROES, CARDS, SYM, cardNeedsTarget } from './cards.js';
-import { startRollingPhase, startGame, startTurn, endTurn, playCard, reclaimCard, resolveShieldPick, resolvePickpocket, resetRoom } from './game.js';
-import { isBot, driveBotTurn } from './bot.js';
+// @ts-nocheck
+import { getOrCreatePlayerId, handleCreateRoom, handleJoinRoom, selectHero, setReady, startGameIfReady, isHost, addBot, setGameMode } from '../firebase/room';
+import { subscribeToRoom } from '../firebase/firebase';
+import { HEROES, CARDS, SYM, cardNeedsTarget } from '../data/cards';
+import { startRollingPhase, startGame, startTurn, endTurn, playCard, reclaimCard, resolveShieldPick, resolvePickpocket, resetRoom } from '../engine/game';
+import { isBot, driveBotTurn } from '../bots/bot';
 
 // --- Module state ---
 let playerId       = getOrCreatePlayerId();
