@@ -2,7 +2,7 @@
 import { getOrCreatePlayerId, handleCreateRoom, handleJoinRoom, selectHero, setReady, startGameIfReady, isHost, addBot, setGameMode } from '../firebase/room';
 import { subscribeToRoom } from '../firebase/firebase';
 import { HEROES, CARDS, SYM, getEffectiveCardSymbols } from '../data/cards';
-import { startRollingPhase, startGame, startTurn, endTurn, playCard, reclaimCard, resolveShieldPick, resolvePickpocket, resetRoom } from '../engine/game';
+import { startRollingPhase, startGame, startTurn, endTurn, playCard, reclaimCard, resolveShieldPick, resolvePickpocket, resetRoom, finishGame } from '../engine/game';
 import { isBot, driveBotTurn } from '../bots/bot';
 import { playActionAnimations } from './animations';
 
@@ -37,6 +37,7 @@ let endTurnTimer            = null;
 let endTurnTick             = 0;
 let pickpocketTargetMode    = false;
 let pickpocketAutoResolving = false;
+let finishTimer             = null;
 
 function effectiveSymbols(card, state, actorId) {
   return getEffectiveCardSymbols(card, state, actorId);
@@ -427,6 +428,7 @@ function initGame() {
 
   document.getElementById('opponents-area').addEventListener('click', async (e) => {
     if (!selectingTarget || playingCard) return;
+    if (roomState?.status !== 'playing') return;
     const panel = e.target.closest('.opponent-panel');
     if (!panel) return;
     const tid = panel.dataset.pid;
@@ -437,6 +439,7 @@ function initGame() {
 
   document.getElementById('self-panel').addEventListener('click', async (e) => {
     if (!selectingTarget || playingCard) return;
+    if (roomState?.status !== 'playing') return;
     if (e.target.closest('.hand-card')) return;
     if (!isTargetablePlayer(roomState, playerId)) return;
     await playSelectedTarget(playerId);
@@ -445,6 +448,7 @@ function initGame() {
   document.getElementById('hand-area').addEventListener('click', async (e) => {
     if (selectingTarget || playingCard) return;
     if (!roomState || roomState.currentTurn !== playerId) return;
+    if (roomState.status !== 'playing') return;
     if (roomState.turnPhase !== 'playing') return;
     if (roomState.pendingReclaim || roomState.pendingShieldPick || roomState.pendingPickpocket) return;
 
@@ -865,7 +869,7 @@ function renderHand(state) {
   const me = state.players[playerId];
   if (!me || me.eliminated) return;
 
-  const isMyTurn = state.currentTurn === playerId && state.turnPhase === 'playing';
+  const isMyTurn = state.status === 'playing' && state.currentTurn === playerId && state.turnPhase === 'playing';
   const played   = state.cardsPlayedThisTurn || 0;
   const extra    = state.extraPlaysThisTurn  || 0;
   const canPlay  = isMyTurn && !selectingTarget && !state.pendingReclaim && !state.pendingShieldPick && !state.pendingPickpocket && (played === 0 || played <= extra);
@@ -940,7 +944,7 @@ function initLogCardPreview() {
 
 function updateGameButtons(state) {
   const me       = state.players[playerId];
-  const isMyTurn = state.currentTurn === playerId && state.turnPhase === 'playing' && !me?.eliminated;
+  const isMyTurn = state.status === 'playing' && state.currentTurn === playerId && state.turnPhase === 'playing' && !me?.eliminated;
   const played   = state.cardsPlayedThisTurn || 0;
   const extra    = state.extraPlaysThisTurn  || 0;
   const canEnd   = isMyTurn && played >= 1 && played > extra && !state.pendingReclaim && !state.pendingShieldPick && !state.pendingPickpocket;
@@ -1071,6 +1075,19 @@ function renderWin(state) {
   }).join('');
 }
 
+function renderFinishing(state) {
+  renderGame(state);
+  if (!isHost(state, playerId) || finishTimer) return;
+
+  const wait = Math.max(0, (state.finishAt || Date.now() + 5000) - Date.now());
+  finishTimer = setTimeout(async () => {
+    finishTimer = null;
+    if (roomState?.status === 'finishing') {
+      await finishGame(roomCode, roomState);
+    }
+  }, wait);
+}
+
 // --- Rolling screen ---
 
 function renderRolling(state) {
@@ -1171,10 +1188,15 @@ function subscribeAndRoute(code) {
       rollingAnimated = false;
       if (rollingTimer) { clearTimeout(rollingTimer); rollingTimer = null; }
     }
+    if (state.status !== 'finishing' && finishTimer) {
+      clearTimeout(finishTimer);
+      finishTimer = null;
+    }
 
     if (state.status === 'lobby')    renderLobby(state);
     if (state.status === 'rolling')  renderRolling(state);
     if (state.status === 'playing')  { renderGame(state); driveBotTurn(roomCode, state, () => roomState); }
+    if (state.status === 'finishing') renderFinishing(state);
     if (state.status === 'finished') renderWin(state);
   });
 }

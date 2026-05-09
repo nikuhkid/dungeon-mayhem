@@ -1,7 +1,7 @@
 export type PlayerId = string;
 export type RoomCode = string;
 export type HeroId = 'sutha' | 'azzan' | 'lia' | 'oriax' | 'minsc' | 'jaheira';
-export type GameStatus = 'lobby' | 'rolling' | 'playing' | 'finished';
+export type GameStatus = 'lobby' | 'rolling' | 'playing' | 'finishing' | 'finished';
 export type GameMode = 'classic' | 'remix';
 export type TurnPhase = 'drawing' | 'playing' | null;
 
@@ -94,6 +94,7 @@ export interface RoomState {
   turnOrder: PlayerId[];
   turnPhase?: TurnPhase;
   winner: PlayerId | null;
+  finishAt?: number | null;
   rolls?: Record<PlayerId, number>;
   playedThisTurn?: Record<PlayerId, string[]>;
   cardsPlayedThisTurn?: number;

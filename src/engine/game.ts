@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { CARDS, SYM, shuffle, buildDeck, buildRemixDecks, getEffectiveCardSymbols } from '../data/cards';
+import { HEROES, CARDS, SYM, shuffle, buildDeck, buildRemixDecks, getEffectiveCardSymbols } from '../data/cards';
 import { updateRoom } from '../firebase/firebase';
 
 // --- Internal helpers ---
@@ -33,6 +33,12 @@ function drawCards(deck, discard, count) {
 
 function logEntry(description, extra = {}) {
   return { description, timestamp: Date.now(), ...extra };
+}
+
+function applyGameOver(updates, winner, fallbackWinnerId) {
+  updates.winner = winner === 'draw' ? fallbackWinnerId : winner;
+  updates.status = 'finishing';
+  updates.finishAt = Date.now() + 5000;
 }
 
 function pushLog(existing, entry) {
@@ -178,6 +184,7 @@ export async function startGame(roomCode, roomState) {
     currentTurn: turnOrder[0],
     turnPhase: 'drawing',
     winner: null,
+    finishAt: null,
     cardsPlayedThisTurn: 0,
     extraPlaysThisTurn: 0,
     extraPlayCardIds: null,
@@ -329,6 +336,7 @@ export function getNextTurn(turnOrder, currentTurn, players) {
 
 export async function playCard(roomCode, roomState, playerId, cardId, targetId = null) {
   const player = roomState.players[playerId];
+  if (roomState.status !== 'playing') return;
   const hand = [...(player.hand || [])];
   const idx  = hand.indexOf(cardId);
   if (idx === -1) return;
@@ -386,8 +394,7 @@ export async function playCard(roomCode, roomState, playerId, cardId, targetId =
   }
   const winner = checkWinCondition(finalPlayers);
   if (winner) {
-    updates.winner = winner === 'draw' ? playerId : winner;
-    updates.status = 'finished';
+    applyGameOver(updates, winner, playerId);
   }
 
   await updateRoom(roomCode, updates);
@@ -461,6 +468,7 @@ export async function resolveShieldPick(roomCode, roomState, playerId, shieldIns
 // --- Pickpocket resolution ---
 
 export async function resolvePickpocket(roomCode, roomState, pickerId, attackTargetId = null) {
+  if (roomState.status !== 'playing') return;
   const pick = roomState.pendingPickpocket;
   if (!pick || pick.pickerId !== pickerId) return;
 
@@ -501,11 +509,20 @@ export async function resolvePickpocket(roomCode, roomState, pickerId, attackTar
   }
   const winner = checkWinCondition(finalPlayers);
   if (winner) {
-    updates.winner = winner === 'draw' ? pickerId : winner;
-    updates.status = 'finished';
+    applyGameOver(updates, winner, pickerId);
   }
 
   await updateRoom(roomCode, updates);
+}
+
+export async function finishGame(roomCode, roomState) {
+  if (roomState.status !== 'finishing') return;
+  if (roomState.finishAt && Date.now() < roomState.finishAt) return;
+  await updateRoom(roomCode, {
+    status: 'finished',
+    turnPhase: null,
+    currentTurn: null,
+  });
 }
 
 // --- Symbol resolution ---
@@ -838,6 +855,15 @@ export function applyDamage(player, amount, discardPile = []) {
 // --- Room reset (Play Again) ---
 
 export async function resetRoom(roomCode, roomState) {
+  const botIds = Object.keys(roomState.players).filter(pid => pid.startsWith('bot_'));
+  const availableHeroes = shuffle(Object.keys(HEROES));
+  const botHeroById = {};
+  for (const botId of botIds) {
+    const heroId = availableHeroes.shift();
+    if (!heroId) break;
+    botHeroById[botId] = heroId;
+  }
+
   const updates = {
     status:              'lobby',
     decks:               {},
@@ -846,6 +872,7 @@ export async function resetRoom(roomCode, roomState) {
     turnOrder:           [],
     turnPhase:           null,
     winner:              null,
+    finishAt:            null,
     lastAction:          null,
     actionLog:           [],
     cardsPlayedThisTurn: 0,
@@ -866,6 +893,10 @@ export async function resetRoom(roomCode, roomState) {
       updates[`players.${pid}.heroId`]        = null;
       updates[`players.${pid}.ready`]         = false;
     } else {
+      const heroId = botHeroById[pid] ?? roomState.players[pid].heroId;
+      const hero = HEROES[heroId];
+      updates[`players.${pid}.name`]          = hero ? `Bot (${hero.name})` : roomState.players[pid].name;
+      updates[`players.${pid}.heroId`]        = heroId;
       updates[`players.${pid}.ready`]         = true;
     }
     updates[`players.${pid}.hp`]              = 10;
