@@ -577,10 +577,12 @@ function renderTableArea(state) {
   const order = state.turnOrder || Object.keys(state.players);
   const allPlayed = [];
 
-  // Shield cards stay in playedThisTurn while active — hide them from table view
-  const activeShieldIds = new Set();
-  for (const p of Object.values(state.players)) {
-    for (const sc of (p.shieldCards || [])) activeShieldIds.add(sc.cardId);
+  // Active shield cards remain staged in playedThisTurn until broken.
+  // Show a shield card during its owner's current turn, then collapse it into the
+  // shield badge once the turn passes.
+  const activeShieldIdsByPlayer = new Map();
+  for (const [pid, p] of Object.entries(state.players)) {
+    activeShieldIdsByPlayer.set(pid, new Set((p.shieldCards || []).map(sc => sc.cardId)));
   }
 
   for (const pid of order) {
@@ -588,7 +590,8 @@ function renderTableArea(state) {
     if (cards.length === 0) continue;
     const p = state.players[pid];
     for (const cid of cards) {
-      if (activeShieldIds.has(cid)) continue;
+      const isActiveShield = activeShieldIdsByPlayer.get(pid)?.has(cid);
+      if (isActiveShield && pid !== state.currentTurn) continue;
       allPlayed.push({ cid, pid, pname: p?.name ?? pid });
     }
   }
