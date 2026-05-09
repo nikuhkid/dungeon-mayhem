@@ -1256,7 +1256,9 @@ function subscribeAndRoute(code) {
         skipEliminatedCurrentTurn(roomCode, state).finally(() => { skipEliminatedInProgress = false; });
       }
       renderGame(state);
-      driveBotTurn(roomCode, state, () => roomState);
+      if (isHost(state, playerId)) {
+        driveBotTurn(roomCode, state, () => roomState);
+      }
     }
     if (state.status === 'finishing') renderFinishing(state);
     if (state.status === 'finished') renderWin(state);

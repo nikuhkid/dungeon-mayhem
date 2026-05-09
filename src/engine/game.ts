@@ -283,6 +283,13 @@ export async function startGame(roomCode, roomState) {
 }
 
 export async function startTurn(roomCode, playerId, roomState) {
+  const liveState = await getRoomState(roomCode);
+  const state = liveState?.status === 'playing' ? liveState : roomState;
+  if (!state || state.status !== 'playing') return;
+  if (state.currentTurn !== playerId || state.turnPhase !== 'drawing') return;
+  if (!state.players?.[playerId] || state.players[playerId].eliminated) return;
+
+  roomState = state;
   const { deck, discard, drawn } = drawCards(
     roomState.decks[playerId] || [],
     roomState.discardPiles[playerId] || [],
@@ -443,8 +450,14 @@ export function getNextTurn(turnOrder, currentTurn, players) {
 // --- Card play ---
 
 export async function playCard(roomCode, roomState, playerId, cardId, targetId = null) {
+  const liveState = await getRoomState(roomCode);
+  const state = liveState?.status === 'playing' ? liveState : roomState;
+  if (!state || state.status !== 'playing') return;
+  if (state.currentTurn !== playerId || state.turnPhase !== 'playing') return;
+
+  roomState = state;
   const player = roomState.players[playerId];
-  if (roomState.status !== 'playing') return;
+  if (!player || player.eliminated) return;
   const hand = [...(player.hand || [])];
   const idx  = hand.indexOf(cardId);
   if (idx === -1) return;
@@ -535,6 +548,11 @@ export async function playCard(roomCode, roomState, playerId, cardId, targetId =
 // --- Reclaim (Divine Inspiration) ---
 
 export async function reclaimCard(roomCode, roomState, playerId, cardId) {
+  const liveState = await getRoomState(roomCode);
+  const state = liveState?.status === 'playing' ? liveState : roomState;
+  if (!state || state.pendingReclaim !== playerId) return;
+
+  roomState = state;
   const discard = [...(roomState.discardPiles[playerId] || [])];
   const idx = discard.indexOf(cardId);
   if (idx === -1) return;
@@ -558,6 +576,11 @@ export async function reclaimCard(roomCode, roomState, playerId, cardId) {
 // --- Shield pick resolution ---
 
 export async function resolveShieldPick(roomCode, roomState, playerId, shieldInstanceId) {
+  const liveState = await getRoomState(roomCode);
+  const state = liveState?.status === 'playing' ? liveState : roomState;
+  if (!state) return;
+
+  roomState = state;
   const pick = roomState.pendingShieldPick;
   if (!pick || pick.pickerId !== playerId) return;
 
@@ -609,6 +632,11 @@ export async function resolveShieldPick(roomCode, roomState, playerId, shieldIns
 // --- Pickpocket resolution ---
 
 export async function resolvePickpocket(roomCode, roomState, pickerId, attackTargetId = null) {
+  const liveState = await getRoomState(roomCode);
+  const state = liveState?.status === 'playing' ? liveState : roomState;
+  if (!state) return;
+
+  roomState = state;
   if (roomState.status !== 'playing') return;
   const pick = roomState.pendingPickpocket;
   if (!pick || pick.pickerId !== pickerId) return;

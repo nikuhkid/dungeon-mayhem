@@ -3,6 +3,7 @@ import {
   getFirestore,
   doc,
   getDoc,
+  getDocFromServer,
   setDoc,
   updateDoc,
   onSnapshot,
@@ -76,7 +77,8 @@ export async function updateRoom(roomCode, data) {
 }
 
 export async function getRoomState(roomCode) {
-  const snap = await getDoc(doc(db, 'rooms', roomCode));
+  const ref = doc(db, 'rooms', roomCode);
+  const snap = await getDocFromServer(ref).catch(() => getDoc(ref));
   return snap.exists() ? snap.data() : null;
 }
 
