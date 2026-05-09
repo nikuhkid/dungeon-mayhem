@@ -703,7 +703,6 @@ function resolveMighty(sym, context, players, decks, discardPiles) {
           players[pid].hand = drawn;
         }
       }
-      extraPlays++;
       break;
     }
 
