@@ -79,6 +79,81 @@ function showMightyOverlay(card) {
   window.setTimeout(() => overlay.remove(), 1250);
 }
 
+function centeredFx(anchor, className, html, duration = 1150) {
+  const host = document.createElement('div');
+  host.className = className;
+  host.innerHTML = html;
+
+  if (anchor) {
+    const rect = anchor.getBoundingClientRect();
+    host.style.left = `${rect.left + rect.width / 2}px`;
+    host.style.top = `${rect.top + rect.height / 2}px`;
+  } else {
+    host.style.left = '50%';
+    host.style.top = '50%';
+  }
+
+  document.body.appendChild(host);
+  window.setTimeout(() => host.remove(), duration);
+}
+
+function showPickpocketFx(actor, target, card) {
+  showMightyOverlay(card);
+  addFxClass(actor, 'fx-rogue-quick', 900);
+  addFxClass(target, 'fx-pickpocket-target', 900);
+  centeredFx(target || actor, 'fx-pickpocket-scene', `
+    <div class="fx-pocket"></div>
+    <div class="fx-pocket-card"></div>
+    <div class="fx-rogue-hand"></div>
+    <div class="fx-pickpocket-label">PICKED</div>
+  `, 1050);
+}
+
+function showSmokeDisguiseFx(actor, card) {
+  showMightyOverlay(card);
+  addFxClass(actor, 'fx-vanish-panel', 1000);
+  centeredFx(actor, 'fx-smoke-bomb', `
+    <span class="fx-smoke-puff p1"></span>
+    <span class="fx-smoke-puff p2"></span>
+    <span class="fx-smoke-puff p3"></span>
+    <span class="fx-smoke-puff p4"></span>
+    <span class="fx-smoke-label">HIDDEN</span>
+  `, 1100);
+}
+
+function showShieldBreakFx(target, card) {
+  showMightyOverlay(card);
+  addFxClass(target, 'fx-shield-break-panel', 900);
+  centeredFx(target, 'fx-shield-break-scene', `
+    <div class="fx-club"></div>
+    <div class="fx-cracked-shield">
+      <span class="crack c1"></span>
+      <span class="crack c2"></span>
+      <span class="crack c3"></span>
+    </div>
+    <div class="fx-break-label">BREAK</div>
+  `, 1050);
+}
+
+function showOriaxMightyFx(action, card, localPlayerId) {
+  const actor = playerPanel(action.playerId, localPlayerId);
+  const target = playerPanel(action.targetId, localPlayerId);
+
+  switch (card.id) {
+    case 'oriax_pick_pocket':
+      showPickpocketFx(actor, target, card);
+      return true;
+    case 'oriax_clever_disguise':
+      showSmokeDisguiseFx(actor, card);
+      return true;
+    case 'oriax_sneak_attack':
+      showShieldBreakFx(target, card);
+      return true;
+    default:
+      return false;
+  }
+}
+
 function targetPanelsForAttack(state, action, localPlayerId, card) {
   if (action.targetId) return [playerPanel(action.targetId, localPlayerId)].filter(Boolean);
   const attacks = card.symbols?.filter(sym => sym.type === SYM.ATTACK) || [];
@@ -122,7 +197,9 @@ export function playActionAnimations(state, localPlayerId) {
   const hasHeal = symbols.some(sym => sym.type === SYM.HEAL);
   const hasDraw = symbols.some(sym => sym.type === SYM.DRAW);
 
-  if (hasMighty) showMightyOverlay(card);
+  if (hasMighty && !showOriaxMightyFx(action, card, localPlayerId)) {
+    showMightyOverlay(card);
+  }
 
   if (hasShield) {
     const actor = playerPanel(action.playerId, localPlayerId);
