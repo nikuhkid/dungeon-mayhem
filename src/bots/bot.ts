@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { CARDS, SYM, getEffectiveCardSymbols } from '../data/cards';
-import { startTurn, endTurn, playCard, reclaimCard, resolveShieldPick, resolvePickpocket } from '../engine/game';
+import { startTurn, endTurn, playCard, reclaimCard, resolveShieldPick, resolvePickpocket, skipEliminatedCurrentTurn } from '../engine/game';
 
 export function isBot(playerId) {
   return typeof playerId === 'string' && playerId.startsWith('bot_');
@@ -18,7 +18,11 @@ export async function driveBotTurn(roomCode, state, getState) {
       const botId = s.currentTurn;
       if (!isBot(botId)) break;
       const bot = s.players[botId];
-      if (!bot || bot.eliminated) break;
+      if (!bot) break;
+      if (bot.eliminated) {
+        await skipEliminatedCurrentTurn(roomCode, s);
+        break;
+      }
       await _act(roomCode, s, botId);
       // Brief pause for Firestore subscription to update roomState
       await new Promise(r => setTimeout(r, 120));

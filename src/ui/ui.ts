@@ -2,7 +2,7 @@
 import { getOrCreatePlayerId, handleCreateRoom, handleJoinRoom, selectHero, setReady, startGameIfReady, isHost, addBot, setGameMode } from '../firebase/room';
 import { subscribeToRoom } from '../firebase/firebase';
 import { HEROES, CARDS, SYM, getEffectiveCardSymbols } from '../data/cards';
-import { startRollingPhase, startGame, startTurn, endTurn, playCard, reclaimCard, resolveShieldPick, resolvePickpocket, resetRoom, finishGame } from '../engine/game';
+import { startRollingPhase, startGame, startTurn, endTurn, playCard, reclaimCard, resolveShieldPick, resolvePickpocket, resetRoom, finishGame, skipEliminatedCurrentTurn } from '../engine/game';
 import { isBot, driveBotTurn } from '../bots/bot';
 import { playActionAnimations } from './animations';
 
@@ -39,6 +39,7 @@ let pickpocketTargetMode    = false;
 let pickpocketAutoResolving = false;
 let finishTimer             = null;
 let damageSoundArmed        = false;
+let skipEliminatedInProgress = false;
 
 const TARGETED_DAMAGE_MIGHTY_EFFECTS = new Set(['mighty_strike']);
 
@@ -1247,7 +1248,15 @@ function subscribeAndRoute(code) {
 
     if (state.status === 'lobby')    renderLobby(state);
     if (state.status === 'rolling')  renderRolling(state);
-    if (state.status === 'playing')  { renderGame(state); driveBotTurn(roomCode, state, () => roomState); }
+    if (state.status === 'playing')  {
+      const current = state.currentTurn ? state.players[state.currentTurn] : null;
+      if (current?.eliminated && isHost(state, playerId) && !skipEliminatedInProgress) {
+        skipEliminatedInProgress = true;
+        skipEliminatedCurrentTurn(roomCode, state).finally(() => { skipEliminatedInProgress = false; });
+      }
+      renderGame(state);
+      driveBotTurn(roomCode, state, () => roomState);
+    }
     if (state.status === 'finishing') renderFinishing(state);
     if (state.status === 'finished') renderWin(state);
   });

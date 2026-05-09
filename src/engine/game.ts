@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { HEROES, CARDS, SYM, shuffle, buildDeck, buildRemixDecks, getEffectiveCardSymbols } from '../data/cards';
-import { updateRoom } from '../firebase/firebase';
+import { getRoomState, updateRoom } from '../firebase/firebase';
 
 // --- Internal helpers ---
 
@@ -350,6 +350,10 @@ export async function startTurn(roomCode, playerId, roomState) {
 }
 
 export async function endTurn(roomCode, roomState, playerId) {
+  const liveState = await getRoomState(roomCode);
+  const state = liveState?.status === 'playing' ? liveState : roomState;
+  if (!state || state.currentTurn !== playerId) return;
+
   const updates = {
     cardsPlayedThisTurn: 0,
     extraPlaysThisTurn:  0,
@@ -364,11 +368,11 @@ export async function endTurn(roomCode, roomState, playerId) {
   updates[`players.${playerId}.frienemiesBonus`] = 0;
 
   const activeShieldCardIds = new Set(
-    (roomState.players[playerId]?.shieldCards || []).map(sc => sc.cardId)
+    (state.players[playerId]?.shieldCards || []).map(sc => sc.cardId)
   );
   if (activeShieldCardIds.size > 0) {
-    const played = roomState.playedThisTurn?.[playerId] || [];
-    const owners = roomState.playedCardOwners?.[playerId] || [];
+    const played = state.playedThisTurn?.[playerId] || [];
+    const owners = state.playedCardOwners?.[playerId] || [];
     const withoutActiveShields = [];
     const ownersWithoutActiveShields = [];
     played.forEach((cid, idx) => {
@@ -383,13 +387,45 @@ export async function endTurn(roomCode, roomState, playerId) {
     }
   }
 
-  const nextId = getNextTurn(roomState.turnOrder, playerId, roomState.players);
-  const entry  = logEntry(`${roomState.players[playerId].name} ended their turn`, { playerId });
+  const nextId = getNextTurn(state.turnOrder, playerId, state.players);
+  const entry  = logEntry(`${state.players[playerId].name} ended their turn`, { playerId });
 
   updates.currentTurn = nextId;
   updates.turnPhase   = 'drawing';
   updates.lastAction  = entry;
-  updates.actionLog   = pushLog(roomState.actionLog, entry);
+  updates.actionLog   = pushLog(state.actionLog, entry);
+
+  await updateRoom(roomCode, updates);
+}
+
+export async function skipEliminatedCurrentTurn(roomCode, roomState) {
+  const liveState = await getRoomState(roomCode);
+  const state = liveState?.status === 'playing' ? liveState : roomState;
+  const currentId = state?.currentTurn;
+  if (!currentId || !state.players?.[currentId]?.eliminated) return;
+
+  const updates = {
+    cardsPlayedThisTurn: 0,
+    extraPlaysThisTurn:  0,
+    extraPlayCardIds:    null,
+    attackTargetThisTurn: null,
+    turnDamageDealt:     0,
+    pendingReclaim:      null,
+    pendingShieldPick:   null,
+    pendingPickpocket:   null,
+  };
+
+  const winner = checkWinCondition(state.players);
+  if (winner) {
+    applyGameOver(updates, winner, getNextTurn(state.turnOrder, currentId, state.players));
+  } else {
+    updates.currentTurn = getNextTurn(state.turnOrder, currentId, state.players);
+    updates.turnPhase   = 'drawing';
+  }
+
+  const entry = logEntry(`Skipped eliminated ${state.players[currentId].name}`, { playerId: currentId });
+  updates.lastAction = entry;
+  updates.actionLog  = pushLog(state.actionLog, entry);
 
   await updateRoom(roomCode, updates);
 }

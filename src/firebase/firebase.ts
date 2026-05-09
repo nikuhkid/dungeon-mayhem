@@ -75,6 +75,11 @@ export async function updateRoom(roomCode, data) {
   await updateDoc(doc(db, 'rooms', roomCode), data);
 }
 
+export async function getRoomState(roomCode) {
+  const snap = await getDoc(doc(db, 'rooms', roomCode));
+  return snap.exists() ? snap.data() : null;
+}
+
 export async function updatePlayer(roomCode, playerId, data) {
   const prefixed = {};
   for (const [key, val] of Object.entries(data)) {
