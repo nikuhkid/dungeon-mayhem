@@ -1612,3 +1612,148 @@ body.card-preview .hand-card:hover {
   min-width: 2rem;
   text-align: right;
 }
+
+/* =========================== GAME FX === */
+
+.fx-card-played {
+  animation: fx-card-played 0.85s cubic-bezier(0.2, 0.9, 0.2, 1);
+  z-index: 5;
+}
+
+@keyframes fx-card-played {
+  0% {
+    transform: translateY(18px) scale(0.88);
+    filter: brightness(1.35) drop-shadow(0 0 16px rgba(255, 215, 0, 0.55));
+  }
+  45% {
+    transform: translateY(-8px) scale(1.06);
+    filter: brightness(1.2) drop-shadow(0 0 24px rgba(255, 215, 0, 0.45));
+  }
+  100% {
+    transform: translateY(0) scale(1);
+    filter: none;
+  }
+}
+
+.fx-hit {
+  animation: fx-hit 0.45s steps(2);
+}
+
+@keyframes fx-hit {
+  0% { transform: translate(0, 0); filter: none; }
+  25% { transform: translate(-7px, 0); filter: brightness(1.5) sepia(1) hue-rotate(-35deg) saturate(2.4); }
+  50% { transform: translate(7px, 0); }
+  75% { transform: translate(-4px, 0); }
+  100% { transform: translate(0, 0); filter: none; }
+}
+
+.fx-shield-gain {
+  animation: fx-shield-gain 0.8s ease-out;
+}
+
+@keyframes fx-shield-gain {
+  0% { box-shadow: var(--px-shadow), 0 0 0 rgba(74, 144, 226, 0); }
+  35% { box-shadow: var(--px-shadow), 0 0 0 5px rgba(74, 144, 226, 0.65), 0 0 22px rgba(74, 144, 226, 0.75); }
+  100% { box-shadow: var(--px-shadow), 0 0 0 rgba(74, 144, 226, 0); }
+}
+
+.fx-heal {
+  animation: fx-heal 0.8s ease-out;
+}
+
+@keyframes fx-heal {
+  0% { filter: none; }
+  35% { filter: brightness(1.35) drop-shadow(0 0 18px rgba(47, 213, 102, 0.75)); }
+  100% { filter: none; }
+}
+
+.fx-draw {
+  animation: fx-draw 0.65s ease-out;
+}
+
+@keyframes fx-draw {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.025); }
+  100% { transform: scale(1); }
+}
+
+.fx-float {
+  position: fixed;
+  transform: translate(-50%, -50%);
+  z-index: 4000;
+  pointer-events: none;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 0.7rem;
+  text-shadow: 3px 3px 0 #000;
+  animation: fx-float 0.9s ease-out forwards;
+}
+
+.fx-float-hit { color: var(--red); }
+.fx-float-shield { color: #7db8ff; }
+.fx-float-heal { color: #47d56a; }
+
+@keyframes fx-float {
+  0% { opacity: 0; transform: translate(-50%, -20%) scale(0.8); }
+  20% { opacity: 1; transform: translate(-50%, -55%) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -145%) scale(1.08); }
+}
+
+.fx-mighty-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 5000;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, rgba(0, 0, 0, 0), rgba(255, 215, 0, 0.16), rgba(0, 0, 0, 0));
+  animation: fx-mighty-overlay 1.2s ease-out forwards;
+}
+
+.fx-mighty-panel {
+  display: grid;
+  justify-items: center;
+  gap: 0.65rem;
+  padding: 1rem 1.25rem;
+  background: rgba(10, 8, 24, 0.92);
+  border: 3px solid var(--gold);
+  box-shadow: 6px 6px 0 var(--gold-dark), 0 0 32px rgba(255, 215, 0, 0.35);
+  animation: fx-mighty-panel 1.2s cubic-bezier(0.2, 0.9, 0.2, 1) forwards;
+}
+
+.fx-mighty-panel img {
+  width: min(190px, 35vw);
+  aspect-ratio: 2 / 3;
+  object-fit: fill;
+  border: 2px solid var(--border);
+  box-shadow: 4px 4px 0 #000;
+}
+
+.fx-mighty-title {
+  font-family: 'Press Start 2P', monospace;
+  font-size: clamp(0.8rem, 2vw, 1.15rem);
+  color: var(--gold);
+  text-shadow: 3px 3px 0 var(--gold-dark);
+}
+
+.fx-mighty-name {
+  max-width: min(420px, 82vw);
+  text-align: center;
+  color: var(--text-bright);
+  font-weight: 800;
+  font-size: 0.85rem;
+}
+
+@keyframes fx-mighty-overlay {
+  0% { opacity: 0; }
+  12% { opacity: 1; }
+  82% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+@keyframes fx-mighty-panel {
+  0% { transform: translateY(24px) scale(0.85); }
+  18% { transform: translateY(0) scale(1.04); }
+  72% { transform: translateY(0) scale(1); }
+  100% { transform: translateY(-16px) scale(0.96); }
+}

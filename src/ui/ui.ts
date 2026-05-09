@@ -4,6 +4,7 @@ import { subscribeToRoom } from '../firebase/firebase';
 import { HEROES, CARDS, SYM, cardNeedsTarget } from '../data/cards';
 import { startRollingPhase, startGame, startTurn, endTurn, playCard, reclaimCard, resolveShieldPick, resolvePickpocket, resetRoom } from '../engine/game';
 import { isBot, driveBotTurn } from '../bots/bot';
+import { playActionAnimations } from './animations';
 
 // --- Module state ---
 let playerId       = getOrCreatePlayerId();
@@ -490,6 +491,7 @@ function renderGame(state) {
     renderHand(state);
     renderActionLog(state);
     updateGameButtons(state);
+    playActionAnimations(state, playerId);
     return;
   }
   hidePickpocketReveal();
@@ -512,6 +514,7 @@ function renderGame(state) {
   renderHand(state);
   renderActionLog(state);
   updateGameButtons(state);
+  playActionAnimations(state, playerId);
 }
 
 // --- Reclaim modal ---
@@ -623,7 +626,7 @@ function renderTableArea(state) {
         const card   = CARDS[cid];
         const src    = cardImg(cid);
         const isMe   = pid === playerId;
-        return `<div class="table-card${isMe ? ' table-card-mine' : ''}">
+        return `<div class="table-card${isMe ? ' table-card-mine' : ''}" data-pid="${pid}" data-cid="${cid}">
           <img src="${src}" alt="${escHtml(card?.name ?? cid)}" draggable="false">
           <div class="card-tooltip">${escHtml(card?.name ?? cid)}</div>
           <div class="table-card-owner">${escHtml(pname)}</div>
