@@ -46,6 +46,15 @@ function shieldTargetEffect(card) {
   )?.effect ?? null;
 }
 
+const TARGETED_DAMAGE_MIGHTY_EFFECTS = new Set(['mighty_strike']);
+
+function hasTargetedDamage(card, state, botId) {
+  return getEffectiveCardSymbols(card, state, botId).some(sym =>
+    (sym.type === SYM.ATTACK && sym.target === 'opponent') ||
+    (sym.type === SYM.MIGHTY && sym.target === 'opponent' && TARGETED_DAMAGE_MIGHTY_EFFECTS.has(sym.effect))
+  );
+}
+
 function hasShieldCards(player) {
   return (player?.shieldCards || []).length > 0;
 }
@@ -64,6 +73,10 @@ function targetCandidatesForCard(state, botId, card) {
     return Object.entries(state.players)
       .filter(([pid, p]) => !p.eliminated && hasShieldCards(p) && (pid === botId || !p.immune || aliveCount <= 2))
       .map(([pid]) => pid);
+  }
+
+  if (hasTargetedDamage(card, state, botId) && state.attackTargetThisTurn) {
+    return [];
   }
 
   const needsOpponent = getEffectiveCardSymbols(card, state, botId).some(s => s.target === 'opponent');

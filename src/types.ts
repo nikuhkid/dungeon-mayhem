@@ -100,6 +100,8 @@ export interface RoomState {
   cardsPlayedThisTurn?: number;
   extraPlaysThisTurn?: number;
   extraPlayCardIds?: string[] | null;
+  attackTargetThisTurn?: PlayerId | null;
+  turnDamageDealt?: number;
   remixPowerAssignments?: Record<PlayerId, {
     ids: string[];
     itemKeys: string[];

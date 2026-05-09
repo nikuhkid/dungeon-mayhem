@@ -127,6 +127,7 @@ function damagePlayer(players, discardPiles, playerId, amount, brokenShields) {
   discardPiles[playerId] = newDiscard;
   brokenShields.push(...brokenShieldCardIds);
   if (newHp <= 0) players[playerId].eliminated = true;
+  return amount;
 }
 
 function transferRandomHandCard(players, fromPlayerId, toPlayerId) {
@@ -156,6 +157,14 @@ function stealTopDeckCard(players, decks, discardPiles, fromPlayerId, toPlayerId
 }
 
 const JAHEIRA_FORM_CARD_IDS = ['jaheira_wolf_form', 'jaheira_bear_form'];
+const TARGETED_DAMAGE_MIGHTY_EFFECTS = new Set(['mighty_strike']);
+
+function hasTargetedDamage(symbols) {
+  return (symbols || []).some(sym =>
+    (sym.type === SYM.ATTACK && sym.target === 'opponent') ||
+    (sym.type === SYM.MIGHTY && sym.target === 'opponent' && TARGETED_DAMAGE_MIGHTY_EFFECTS.has(sym.effect))
+  );
+}
 
 // --- Turn management ---
 
@@ -188,6 +197,8 @@ export async function startGame(roomCode, roomState) {
     cardsPlayedThisTurn: 0,
     extraPlaysThisTurn: 0,
     extraPlayCardIds: null,
+    attackTargetThisTurn: null,
+    turnDamageDealt: 0,
     pendingReclaim: null,
     pendingShieldPick: null,
     pendingPickpocket: null,
@@ -276,6 +287,8 @@ export async function startTurn(roomCode, playerId, roomState) {
   updates.cardsPlayedThisTurn = 0;
   updates.extraPlaysThisTurn  = 0;
   updates.extraPlayCardIds    = null;
+  updates.attackTargetThisTurn = null;
+  updates.turnDamageDealt     = 0;
   updates.pendingReclaim      = null;
   updates.pendingShieldPick   = null;
   updates.pendingPickpocket   = null;
@@ -294,6 +307,8 @@ export async function endTurn(roomCode, roomState, playerId) {
     cardsPlayedThisTurn: 0,
     extraPlaysThisTurn:  0,
     extraPlayCardIds:    null,
+    attackTargetThisTurn: null,
+    turnDamageDealt:     0,
     pendingReclaim:      null,
     pendingShieldPick:   null,
     pendingPickpocket:   null,
@@ -352,10 +367,17 @@ export async function playCard(roomCode, roomState, playerId, cardId, targetId =
 
   if (isRestrictedExtraPlay && !restrictedExtraCardIds.includes(cardId)) return;
 
-  const targetName = targetId ? roomState.players[targetId]?.name : null;
+  const symbolsToResolve = getEffectiveCardSymbols(card, roomState, playerId);
+  const isTargetedDamage = hasTargetedDamage(symbolsToResolve);
+  const lockedAttackTarget = roomState.attackTargetThisTurn;
+  const resolvedTargetId = isTargetedDamage && lockedAttackTarget
+    ? lockedAttackTarget
+    : targetId;
+
+  const targetName = resolvedTargetId ? roomState.players[resolvedTargetId]?.name : null;
   const entry = logEntry(
     `${player.name} played ${card?.name ?? cardId}${targetName ? ` → ${targetName}` : ''}`,
-    { playerId, cardId, targetId }
+    { playerId, cardId, targetId: resolvedTargetId }
   );
 
   const updates = {
@@ -370,7 +392,9 @@ export async function playCard(roomCode, roomState, playerId, cardId, targetId =
     updates.extraPlayCardIds = null;
   }
 
-  const symbolsToResolve = getEffectiveCardSymbols(card, roomState, playerId);
+  if (isTargetedDamage && !lockedAttackTarget && resolvedTargetId) {
+    updates.attackTargetThisTurn = resolvedTargetId;
+  }
 
   if (symbolsToResolve?.length) {
     const stateForEffect = {
@@ -378,7 +402,7 @@ export async function playCard(roomCode, roomState, playerId, cardId, targetId =
       players:          { ...roomState.players, [playerId]: { ...player, hand } },
       playedThisTurn:   { ...roomState.playedThisTurn, [playerId]: played },
     };
-    const effectUpdates = resolveSymbols(symbolsToResolve, { playerId, targetId, cardId }, stateForEffect);
+    const effectUpdates = resolveSymbols(symbolsToResolve, { playerId, targetId: resolvedTargetId, cardId }, stateForEffect);
     Object.assign(updates, effectUpdates);
   }
 
@@ -475,11 +499,20 @@ export async function resolvePickpocket(roomCode, roomState, pickerId, attackTar
   const { stolenCardId, ownerId } = pick;
   const stolenCard = CARDS[stolenCardId];
   const updates = { pendingPickpocket: null };
+  const symbolsToResolve = getEffectiveCardSymbols(stolenCard, roomState, pickerId);
+  const isTargetedDamage = hasTargetedDamage(symbolsToResolve);
+  const lockedAttackTarget = roomState.attackTargetThisTurn;
+  const resolvedAttackTargetId = isTargetedDamage && lockedAttackTarget
+    ? lockedAttackTarget
+    : attackTargetId;
 
-  if (stolenCard?.symbols?.length) {
+  if (symbolsToResolve?.length) {
+    if (isTargetedDamage && !lockedAttackTarget && resolvedAttackTargetId) {
+      updates.attackTargetThisTurn = resolvedAttackTargetId;
+    }
     const effectUpdates = resolveSymbols(
-      getEffectiveCardSymbols(stolenCard, roomState, pickerId),
-      { playerId: pickerId, targetId: attackTargetId, cardId: stolenCardId },
+      symbolsToResolve,
+      { playerId: pickerId, targetId: resolvedAttackTargetId, cardId: stolenCardId },
       roomState
     );
     Object.assign(updates, effectUpdates);
@@ -529,7 +562,7 @@ export async function finishGame(roomCode, roomState) {
 
 function applySymbols(symbols, context, players, decks, discardPiles) {
   const { playerId, targetId } = context;
-  const result = { bonusPlays: 0 };
+  const result = { bonusPlays: 0, damageDealt: 0 };
   const brokenShields = [];
 
   const ordered = [
@@ -550,7 +583,7 @@ function applySymbols(symbols, context, players, decks, discardPiles) {
           targets = getAttackTargets(sym.target, playerId, players);
         }
         for (const tid of targets) {
-          damagePlayer(players, discardPiles, tid, sym.value + bonus, brokenShields);
+          result.damageDealt += damagePlayer(players, discardPiles, tid, sym.value + bonus, brokenShields);
         }
         break;
       }
@@ -572,15 +605,16 @@ function applySymbols(symbols, context, players, decks, discardPiles) {
         break;
 
       case SYM.MIGHTY: {
-        const { bonusPlays, brokenShields: bs } = resolveMighty(sym, context, players, decks, discardPiles);
+        const { bonusPlays, damageDealt, brokenShields: bs } = resolveMighty(sym, context, players, decks, discardPiles);
         result.bonusPlays += bonusPlays;
+        result.damageDealt += damageDealt;
         brokenShields.push(...bs);
         break;
       }
     }
   }
 
-  return { bonusPlays: result.bonusPlays, brokenShields };
+  return { bonusPlays: result.bonusPlays, damageDealt: result.damageDealt, brokenShields };
 }
 
 export function resolveSymbols(symbols, context, roomState) {
@@ -594,7 +628,7 @@ export function resolveSymbols(symbols, context, roomState) {
   const reclaimSyms = symbols.filter(s => s.type === SYM.RECLAIM);
   const otherSyms   = symbols.filter(s => s.type !== SYM.RECLAIM);
 
-  const { bonusPlays, brokenShields } = applySymbols(otherSyms, ctx, players, decks, discardPiles);
+  const { bonusPlays, damageDealt, brokenShields } = applySymbols(otherSyms, ctx, players, decks, discardPiles);
   let pendingReclaim = false;
 
   // Route broken shield cards to their original card owner's discard
@@ -652,6 +686,8 @@ export function resolveSymbols(symbols, context, roomState) {
 
   if (bonusPlays > 0)
     updates.extraPlaysThisTurn = (roomState.extraPlaysThisTurn || 0) + bonusPlays;
+  if (damageDealt > 0)
+    updates.turnDamageDealt = (roomState.turnDamageDealt || 0) + damageDealt;
   if (ctx.extraPlayCardIds)
     updates.extraPlayCardIds = ctx.extraPlayCardIds;
   if (pendingReclaim)
@@ -677,14 +713,14 @@ export function resolveSymbols(symbols, context, roomState) {
 
 function resolveMighty(sym, context, players, decks, discardPiles) {
   const { playerId, targetId } = context;
-  const result = { bonusPlays: 0 };
+  const result = { bonusPlays: 0, damageDealt: 0 };
   const brokenShields = [];
 
   switch (sym.effect) {
 
     case 'mighty_strike': {
       if (!targetId || !players[targetId] || players[targetId].eliminated || players[targetId].immune) break;
-      damagePlayer(players, discardPiles, targetId, sym.value, brokenShields);
+      result.damageDealt += damagePlayer(players, discardPiles, targetId, sym.value, brokenShields);
       break;
     }
 
@@ -779,7 +815,7 @@ function resolveMighty(sym, context, players, decks, discardPiles) {
       healPlayer(players, playerId, allOpps.length);
       const dmgOpps = allOpps.filter(pid => !players[pid].immune);
       for (const tid of dmgOpps) {
-        damagePlayer(players, discardPiles, tid, 1, brokenShields);
+        result.damageDealt += damagePlayer(players, discardPiles, tid, 1, brokenShields);
       }
       break;
     }
@@ -822,7 +858,7 @@ function resolveMighty(sym, context, players, decks, discardPiles) {
     }
   }
 
-  return { bonusPlays: result.bonusPlays, brokenShields };
+  return { bonusPlays: result.bonusPlays, damageDealt: result.damageDealt, brokenShields };
 }
 
 // --- Shield/damage resolution ---
@@ -878,6 +914,8 @@ export async function resetRoom(roomCode, roomState) {
     cardsPlayedThisTurn: 0,
     extraPlaysThisTurn:  0,
     extraPlayCardIds:    null,
+    attackTargetThisTurn: null,
+    turnDamageDealt:     0,
     remixPowerAssignments: null,
     pendingReclaim:      null,
     pendingShieldPick:   null,

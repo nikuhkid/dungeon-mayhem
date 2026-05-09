@@ -38,6 +38,9 @@ let endTurnTick             = 0;
 let pickpocketTargetMode    = false;
 let pickpocketAutoResolving = false;
 let finishTimer             = null;
+let damageSoundArmed        = false;
+
+const TARGETED_DAMAGE_MIGHTY_EFFECTS = new Set(['mighty_strike']);
 
 function effectiveSymbols(card, state, actorId) {
   return getEffectiveCardSymbols(card, state, actorId);
@@ -47,6 +50,13 @@ function shieldTargetEffect(card) {
   return card?.symbols?.find(
     s => s.type === SYM.MIGHTY && (s.effect === 'steal_shield' || s.effect === 'destroy_one_shield')
   )?.effect ?? null;
+}
+
+function hasTargetedDamage(card, state, actorId) {
+  return effectiveSymbols(card, state, actorId).some(sym =>
+    (sym.type === SYM.ATTACK && sym.target === 'opponent') ||
+    (sym.type === SYM.MIGHTY && sym.target === 'opponent' && TARGETED_DAMAGE_MIGHTY_EFFECTS.has(sym.effect))
+  );
 }
 
 function aliveCount(state) {
@@ -72,6 +82,10 @@ function targetCandidatesForCard(state, actorId, card) {
     return Object.entries(state.players)
       .filter(([pid, p]) => !p.eliminated && hasShieldCards(p) && (pid === actorId || !p.immune || count <= 2))
       .map(([pid]) => pid);
+  }
+
+  if (hasTargetedDamage(card, state, actorId) && state.attackTargetThisTurn) {
+    return [];
   }
 
   const needsOpponent = effectiveSymbols(card, state, actorId).some(s => s.target === 'opponent');
@@ -1021,6 +1035,43 @@ function playTurnSound() {
   } catch (_) {}
 }
 
+function playDamageBurstSound() {
+  try {
+    const ac   = new (window.AudioContext || window.webkitAudioContext)();
+    const gain = ac.createGain();
+    gain.connect(ac.destination);
+    gain.gain.setValueAtTime(0.10, ac.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + 0.35);
+
+    const thud = ac.createOscillator();
+    thud.type = 'triangle';
+    thud.frequency.setValueAtTime(150, ac.currentTime);
+    thud.frequency.exponentialRampToValueAtTime(70, ac.currentTime + 0.16);
+    thud.connect(gain);
+    thud.start(ac.currentTime);
+    thud.stop(ac.currentTime + 0.18);
+
+    const crack = ac.createOscillator();
+    crack.type = 'square';
+    crack.frequency.setValueAtTime(95, ac.currentTime + 0.04);
+    crack.connect(gain);
+    crack.start(ac.currentTime + 0.04);
+    crack.stop(ac.currentTime + 0.12);
+  } catch (_) {}
+}
+
+function maybePlayDamageBurstSound(state) {
+  const damage = state.turnDamageDealt || 0;
+  if (damage === 0) {
+    damageSoundArmed = true;
+    return;
+  }
+  if (damage >= 5 && damageSoundArmed) {
+    damageSoundArmed = false;
+    playDamageBurstSound();
+  }
+}
+
 // --- Pickpocket reveal ---
 
 function showPickpocketReveal(cardId, needsTarget) {
@@ -1192,6 +1243,7 @@ function subscribeAndRoute(code) {
       clearTimeout(finishTimer);
       finishTimer = null;
     }
+    maybePlayDamageBurstSound(state);
 
     if (state.status === 'lobby')    renderLobby(state);
     if (state.status === 'rolling')  renderRolling(state);
